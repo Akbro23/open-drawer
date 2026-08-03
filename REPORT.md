@@ -244,6 +244,13 @@ decoder with no tokenizer in between. The encoder's output layer is
 pi0.5 and the tactile pathway grows from zero rather than perturbing a working
 4B model.
 
+The same zero initialization that makes the pathway safe also makes it
+invisible: a run in which tactile carries nothing produces an identical loss
+curve to one in which it carries everything. The norm of the tactile
+contribution, and its ratio to the timestep conditioning it is added to, are
+therefore logged every step — they are the only evidence during training that
+the modality is being used at all.
+
 **(b) An invisible, per-environment task parameter.**
 Each drawer's travel stop is randomized *per environment* using Genesis's
 batched DOF-limit facility. This makes "how far to pull" genuinely
