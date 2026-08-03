@@ -2,6 +2,7 @@
 
     uv run evaluate                                   # replay; needs no lerobot
     uv run evaluate --mode policy --checkpoint out/train/open_drawer/...
+    uv run evaluate --mode policy --video out/eval.mp4
 
 This is the other half of `record.py`. That module defines what an action MEANS;
 this one is the only place that has to interpret it, and it has to interpret it
@@ -28,6 +29,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+import cv2
 import numpy as np
 import genesis as gs
 
@@ -35,9 +37,10 @@ from . import teacher
 from .config import CHECKPOINT, EnvConfig
 from .randomize import EpisodeSetup, sample_episode
 from .record import Recorder, state_vector
+from .render_episode import write
 from .robot import N_DOFS
 from .scene import SceneBundle, build_scene
-from .task_state import EpisodeResult, Monitor
+from .task_state import EpisodeResult, Monitor, cabinet_shift
 
 
 def run_policy(b: SceneBundle, setup: EpisodeSetup, policy, ticks: int, *,
@@ -132,6 +135,28 @@ class Pi05Policy:
         return self.post(action).cpu().numpy()
 
 
+def _film(b: SceneBundle, e: int, frames: list) -> None:
+    """One frame per action tick, with the same lines `render` burns in.
+
+    The tick rate IS the video rate here -- 25 Hz -- so the mp4 plays back at
+    the speed the policy actually ran at, unlike `render`, which films the
+    control loop and subsamples it.
+    """
+    img = np.ascontiguousarray(b.render()[e])
+    s = b.setup
+    lines = [
+        s.prompts[e],
+        f"travel {b.drawer_travel()[e, s.target_idx[e]] * 1e3:6.1f}"
+        f" / {s.target_travel[e] * 1e3:.1f} mm",
+        f"taxel  {b.tactile_peak()[e]:6.2f}",
+        f"cab    {cabinet_shift(b)[e] * 1e3:6.1f} mm",
+    ]
+    for i, line in enumerate(lines):
+        cv2.putText(img, line, (10, 24 + 22 * i), cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6, (255, 255, 255), 2, cv2.LINE_AA)
+    frames.append(img)
+
+
 def replay(cfg: EnvConfig, batches: int) -> None:
     """Teacher, then its own actions fed back through the inference loop."""
     b = build_scene(cfg)
@@ -170,19 +195,28 @@ def replay(cfg: EnvConfig, batches: int) -> None:
               "\n  this loop thinks they mean. Fix that before training anything.")
 
 
-def evaluate(cfg: EnvConfig, batches: int, checkpoint: str, ticks: int) -> None:
+def evaluate(cfg: EnvConfig, batches: int, checkpoint: str, ticks: int, *,
+             video: str | None = None, env: int = 0) -> None:
     policy = Pi05Policy(checkpoint)
     b = build_scene(cfg)
     rng = np.random.default_rng(cfg.seed)
 
-    out = []
+    out, frames = [], []
     for i in range(batches):
         setup = sample_episode(cfg, rng)
         b.reset(setup)
         policy.reset()
-        r = run_policy(b, setup, policy, ticks)
+        # Only the first batch is filmed; the rest are the same episode with a
+        # different draw, and one mp4 is what a demo needs.
+        hook = (lambda: _film(b, env, frames)) if video and i == 0 else None
+        r = run_policy(b, setup, policy, ticks, on_tick=hook)
         out.append(r)
         print(f"  batch {i + 1}/{batches}: {r.success.sum()}/{r.n}")
+        if frames and i == 0:
+            print(f"  env {env}: success={bool(r.success[env])} "
+                  f"travel={r.travel[env] * 1e3:.1f} mm "
+                  f"latency={r.latency[env]}  '{setup.prompts[env]}'")
+            write(frames, Path(video), round(1 / (cfg.dt * cfg.record_every)))
 
     r = EpisodeResult(**{f: np.concatenate([getattr(x, f) for x in out])
                          for f in EpisodeResult.__dataclass_fields__})
@@ -209,17 +243,23 @@ def main() -> None:
     ap.add_argument("--ticks", type=int, default=200,
                     help="action ticks per episode under policy control")
     ap.add_argument("--checkpoint", default=CHECKPOINT)
+    ap.add_argument("--video", help="film one env of the first batch to this mp4")
+    ap.add_argument("--env", type=int, default=0, help="which env to film")
     args = ap.parse_args()
 
     gs.init(backend=gs.gpu, logging_level="warning")
-    cfg = EnvConfig(n_envs=args.envs, seed=args.seed, add_wrist_cams=True)
+    # The free camera is only built when it is going to be used: it is not an
+    # observation, and rendering it costs a frame per tick.
+    cfg = EnvConfig(n_envs=args.envs, seed=args.seed, add_wrist_cams=True,
+                    add_camera=bool(args.video))
 
     if args.mode == "replay":
         replay(cfg, args.batches)
         return
     if not Path(args.checkpoint).exists():
         raise SystemExit(f"no checkpoint at {args.checkpoint}")
-    evaluate(cfg, args.batches, args.checkpoint, args.ticks)
+    evaluate(cfg, args.batches, args.checkpoint, args.ticks,
+             video=args.video, env=args.env)
 
 
 if __name__ == "__main__":

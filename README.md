@@ -212,7 +212,9 @@ reports **release latency** — control steps between the true stop and the
 release — which is the measure of whether the tactile channel is doing its job.
 
 It reads `out/train/open_drawer/checkpoints/last/pretrained_model` by default;
-pass `--checkpoint` for any other.
+pass `--checkpoint` for any other. Add `--video out/eval.mp4` to film one
+environment of the first batch, with the live task state burned in — this is
+how the demonstration video above was made.
 
 > Do not evaluate while training is running. Both load a 4B model onto the same
 > GPU.
