@@ -95,8 +95,10 @@ class Pi05Policy:
     chunks, so the symptom shows up in wall time rather than silently in the
     trajectory.
 
-    UNVERIFIED OFF-INSTANCE: lerobot is not importable locally, so the batch
-    assembly below is written against its source and not executed.
+    The batch below must match what the DATASET yields, not what the simulator
+    renders. LeRobotDataset serves images as (N, 3, H, W) float in [0, 1];
+    `render_obs` returns (N, H, W, 3) uint8. Handing the latter straight to the
+    policy reaches the vision tower as a 224-channel image.
     """
 
     def __init__(self, checkpoint: str, *, device: str = "cuda"):
@@ -117,10 +119,12 @@ class Pi05Policy:
 
     def __call__(self, images, state, tactile, prompts) -> np.ndarray:
         torch = self.torch
-        batch = {f"observation.images.{k}": torch.from_numpy(v).to(self.device)
+        batch = {f"observation.images.{k}":
+                 torch.from_numpy(v).to(self.device)
+                      .permute(0, 3, 1, 2).float().div_(255.0)
                  for k, v in images.items()}
-        batch["observation.state"] = torch.from_numpy(state).to(self.device)
-        batch[self.key_tactile] = torch.from_numpy(tactile).to(self.device)
+        batch["observation.state"] = torch.from_numpy(state).to(self.device).float()
+        batch[self.key_tactile] = torch.from_numpy(tactile).to(self.device).float()
         batch["task"] = list(prompts)
 
         with torch.no_grad():
