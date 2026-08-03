@@ -205,16 +205,23 @@ upside down. Both were found by rendering, not by reasoning.
 
 ## Status
 
-Verified: scene construction, per-environment travel stops, the teacher, the
-recorder's shapes against the declared dataset features, and the replay
-regression.
+Exercised: scene construction, per-environment travel stops, the teacher, the
+recorder's shapes against the declared dataset features, the LeRobot write path
+(1024 episodes, none dropped), the replay regression against the dataset on
+disk, and training — `policy_tactile.py` loads `lerobot/pi05_base` and steps
+under the 8-bit optimizer.
 
-Not yet exercised end to end: the LeRobot dataset write path beyond
-`collect --dry-run`, `policy_tactile.py`, and `train.py`. The assumptions each
-makes about lerobot internals are named in their docstrings. Two are worth
-checking first — that `observation.tactile` survives
-`dataset_to_policy_features` and receives normalization statistics, and that
-loading `lerobot/pi05_base` reports `tactile_mlp.*` as missing keys, which is
-expected.
+`observation.tactile` lands where it was meant to. `dataset_to_policy_features`
+types any `observation.*` key as STATE, so it becomes a policy input and picks
+up normalization statistics, while the state tokenizer reads `observation.state`
+by name and never sees it. Normalized, and not quantized into the prompt.
+
+That confirms the plumbing, not the mechanism. The tactile encoder is
+zero-initialised, so a training run looks identical whether or not touch is
+carrying information — only closed-loop evaluation, and release latency in
+particular, can show that it is.
+
+Not yet done: the full training run, and evaluation of its checkpoint.
+Inference latency per chunk is unmeasured.
 
 The 100% teacher rate is over roughly 1100 episodes.
