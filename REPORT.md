@@ -104,6 +104,12 @@ average (6.6 s), recorded in 8 batches of 128 environments. No episode was
 dropped — the teacher succeeded in all 1024. Generation took **81.7 minutes**
 end to end, 12.5 episodes/min; §4 breaks that time down.
 
+On disk it is **256 MB**, about 1.5 KB per frame. The same frames held raw, as
+they are in RAM during collection, would be 25 GB — the ~100× is mp4 encoding
+of the wrist stream, and it is the reason collection is bounded by encoding
+time rather than by storage. Roughly 29 MB of the total is the parquet holding
+state, action and tactile.
+
 Two properties of this dataset are contracts rather than conventions, and both
 are documented at the point of use:
 
