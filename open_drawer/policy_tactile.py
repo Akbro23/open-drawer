@@ -83,11 +83,17 @@ class TactilePI05Pytorch(PI05Pytorch):
         nn.init.zeros_(self.tactile_mlp[-1].weight)
         nn.init.zeros_(self.tactile_mlp[-1].bias)
         self.tactile: Tensor | None = None
+        # Logged, not learned. Non-persistent so they stay out of checkpoints.
+        self.register_buffer("_cond_norm", torch.zeros(()), persistent=False)
+        self.register_buffer("_base_norm", torch.zeros(()), persistent=False)
 
     def embed_suffix(self, noisy_actions, timestep):
         embs, pad_masks, att_masks, adarms_cond = super().embed_suffix(noisy_actions, timestep)
         if self.tactile is not None:
-            adarms_cond = adarms_cond + self.tactile_mlp(self.tactile.to(adarms_cond.dtype))
+            cond = self.tactile_mlp(self.tactile.to(adarms_cond.dtype))
+            self._cond_norm = cond.detach().float().norm(dim=-1).mean()
+            self._base_norm = adarms_cond.detach().float().norm(dim=-1).mean()
+            adarms_cond = adarms_cond + cond
         return embs, pad_masks, att_masks, adarms_cond
 
 
@@ -136,7 +142,16 @@ class TactilePI05Policy(PI05Policy):
 
     def forward(self, batch: dict[str, Tensor], reduction: str = "mean"):
         self._set_tactile(batch)
-        return super().forward(batch, reduction=reduction)
+        loss, out = super().forward(batch, reduction=reduction)
+        if self.model.tactile is not None:
+            # The whole point of the zero init is that this starts at 0. If it
+            # is still 0 late in training, touch is earning nothing and the
+            # pathway is decoration -- which no loss curve would reveal.
+            m = self.model
+            out["tactile_cond_norm"] = m._cond_norm.item()
+            out["tactile_cond_ratio"] = (
+                m._cond_norm / m._base_norm.clamp_min(1e-6)).item()
+        return loss, out
 
     @torch.no_grad()
     def predict_action_chunk(self, batch: dict[str, Tensor], **kwargs) -> Tensor:
