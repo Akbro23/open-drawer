@@ -5,8 +5,8 @@
 #   STEPS=2000 SAVE_FREQ=1000 scripts/train.sh --batch_size=8
 #
 # Ten hours outlives an ssh session, so the run is nohup'd and its output goes
-# to a timestamped log. The tail at the end is a convenience: Ctrl-C stops only
-# the tail, and this shell can then be closed.
+# to a timestamped log. This returns the terminal immediately; the run keeps
+# going after the session closes.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -39,15 +39,15 @@ if [ "$free_gb" -lt "$want_gb" ]; then
 fi
 
 log="out/train-$(date +%Y%m%d-%H%M%S).log"
-nohup uv run train --steps="$STEPS" --save_freq="$SAVE_FREQ" "$@" > "$log" 2>&1 &
+# </dev/null so it can never block waiting on input that will not arrive.
+nohup uv run train --steps="$STEPS" --save_freq="$SAVE_FREQ" "$@" \
+    > "$log" 2>&1 < /dev/null &
 echo $! > "$pid_file"
-# Stable path to follow, whichever run is current.
-ln -sfn "$(basename "$log")" out/train.log
 
 echo
-echo "started  pid $(cat "$pid_file")  ->  $log"
-echo "follow   tail -f out/train.log"
+echo "started  pid $(cat "$pid_file")"
+echo "follow   tail -f $log"
+echo "check    ps -p \$(cat $pid_file) && tail -3 $log"
 echo "stop     pkill -f lerobot_train"
 echo "resume   scripts/train.sh --resume=true"
 echo
-tail -f "$log"
