@@ -293,6 +293,20 @@ and LeRobot's policy factory resolves policy classes through a hardcoded
 if/elif chain with no registry, so an externally-defined policy cannot be
 selected by `--policy.type` without patching.
 
+**(g) Two simulator findings that cost time.**
+
+*Grip force is `kp` times commanded overshoot.* The jaws are commanded
+*through* the rail; they cannot arrive, and the standing position error is the
+grip. Commanding the rail's own thickness would arrive with no error and apply
+no force at all — a gripper that closes on the handle and holds nothing.
+
+*A wrist camera mount does not transfer from a tool-down task.* The grasp
+orientation here carries 90 degrees of wrist yaw, which maps the hand's y axis
+onto world x, so a tilt applied as pitch pans the view sideways and never toward
+the cabinet — the lean has to be roll. A 180 degree roll additionally inverts
+the column that Genesis's `T_to_pos_lookat_up` reads as "up", rendering the
+scene upside down. Both were found by rendering, not by reasoning.
+
 ## 6. Deliverables
 
 - **Source repository** — parametric Genesis environment, scripted teacher,

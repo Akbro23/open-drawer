@@ -9,119 +9,229 @@ lets go — in Genesis, with pi0.5 conditioned on a fingertip tactile array.
                         ->  pull  ->  feel the stop  ->  release  ->  retract
 ```
 
-## The task, and why it is not trivially solvable
+**Technical report:** [REPORT.md](REPORT.md) — measurements, scaling results,
+and the reasoning behind the task design, the tactile pathway and the training
+configuration.
 
-A two-drawer cabinet stands **free** on a table. Three properties make each of
-the three modalities load-bearing rather than decorative:
+**Demonstration video:** _link_
 
-**Language decides *which*.** The two drawers are geometrically and visually
-identical. No camera can tell them apart, so the prompt is the only thing that
-selects a target. A policy that ignores it scores 50%.
+## Overview
 
-**Touch decides *when*.** Each drawer's travel stop is randomized per episode
-and written per environment. It is *invisible* — nothing about a closed drawer
-reveals how far it will open — so how far to pull cannot be memorized or seen.
-It has to be felt.
+A two-drawer cabinet stands free on a table. Three properties make each of the
+three modalities load-bearing rather than decorative:
 
-**Over-pulling costs something.** This is the part that makes the previous
-point real. The cabinet is not bolted down. Keep pulling after the drawer has
-bottomed out and the load transfers into the cabinet, which slides toward the
-robot. Success requires it to have stayed put. Without this, a policy that
-simply pulls for the maximum duration and then opens its jaws would score 100%
-and never touch the tactile channel.
+- **Language decides *which*.** The two drawers are geometrically and visually
+  identical, so the prompt is the only thing that selects a target.
+- **Touch decides *when*.** Each drawer's travel stop is randomized per episode
+  and per environment, and nothing about a closed drawer reveals how far it will
+  open. It cannot be memorized or seen; it has to be felt.
+- **Over-pulling costs something.** The cabinet is not bolted down. Keep pulling
+  after the drawer bottoms out and the cabinet slides, which fails the episode —
+  so pulling for the maximum duration is not a winning strategy.
 
-## Setup
+The pipeline is three stages: a scripted teacher records demonstrations in
+batched simulation, pi0.5 is fine-tuned on them with a tactile pathway added to
+its action expert, and the checkpoint is scored closed-loop in the same
+simulator.
 
-Requires Python 3.12 and a ROCm-capable GPU.
-
-```bash
-cp .env.example .env          # fill in HF_TOKEN and WANDB_API_KEY
-source scripts/instance-env.sh
-uv sync
-```
-
-`scripts/instance-env.sh` does three things: points the uv and Hugging Face
-caches at persistent storage (the container's own filesystem does not survive a
-restart), loads `.env`, and — **if you are running from mainland China** —
-switches package and model downloads to mirrors, since PyPI and
-`huggingface.co` are effectively unreachable there. It sets
-`UV_DEFAULT_INDEX` to the Tsinghua PyPI mirror and `HF_ENDPOINT` to
-`hf-mirror.com`.
-
-Both replace their upstream rather than adding to it, so **source it before
-`uv sync`**: `UV_DEFAULT_INDEX` decides the URLs written into `uv.lock`. The
-script adds itself to `~/.bashrc` so later shells pick it up.
-
-Outside China, skip it or export your own values first — every variable it sets
-honours one already in the environment, so `UV_DEFAULT_INDEX=https://pypi.org/simple`
-set beforehand wins.
-
-`uv sync` then installs the pinned ROCm PyTorch stack, Genesis 1.2.3 and
-lerobot, and installs this project so its commands exist.
-
-pi0.5 additionally needs the PaliGemma licence accepted in a browser, not just
-a token — otherwise its tokenizer returns 403 regardless of what the token
-says.
-
-## Pipeline
-
-```bash
-uv run render                          # film one episode, dump derived geometry
-uv run rollout --envs 16               # teacher success rate and throughput
-uv run evaluate                        # replay regression (no checkpoint needed)
-
-uv run collect --scaling 8,16,32,64    # find the host-RAM ceiling first
-uv run collect --envs 128 --batches 8  # record the dataset
-uv run train                           # fine-tune pi0.5 + tactile
-uv run evaluate --mode policy          # score the checkpoint in the loop
-```
-
-`uv run rollout --scaling 1,4,16,64` sweeps batched physics with rendering off.
-
-## Results
-
-Teacher, 128 episodes at N=64:
+## Requirements
 
 | | |
 |---|---|
-| success | 128/128 |
-| opened / released | 128/128 |
-| wrong drawer, cabinet dragged | 0, 0 |
-| travel | mean 95.9 mm |
-| shortfall from the stop | mean 0.00 mm |
-| cabinet displacement | mean 0.25 mm, max 0.68 mm (limit 10 mm) |
-| release latency | median 132 control steps, max 205 |
+| Python | 3.12 exactly (`requires-python = "==3.12.*"`) |
+| GPU | ROCm-capable, ≥32 GB for training; collection and evaluation need ~2 GB |
+| Disk | ~100 GB — dataset ~256 MB, each training checkpoint ~17 GB |
+| Accounts | Hugging Face (with the PaliGemma licence accepted), Weights & Biases |
 
-Batched physics, two episodes per env count — 960 episodes, all successful:
+### Install uv
 
-| N | wall | episodes/min | speedup |
-|---|---|---|---|
-| 32 | 31.6 s | 121.5 | 1.0× |
-| 64 | 31.3 s | 245.6 | 2.0× |
-| 128 | 33.3 s | 461.3 | 3.8× |
-| 256 | 34.8 s | 882.7 | 7.3× |
+Everything is driven through [uv](https://docs.astral.sh/uv/), which manages the
+Python version, the virtual environment and the dependencies together.
 
-Eight times the environments for 10% more wall time. Collection is bounded by
-host RAM rather than by this, which is why `collect` has its own probe.
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
 
-Dataset: **1024 episodes, 170,624 frames**, 0 dropped, in 81.7 min. Only ~5 of
-those minutes are simulation — the rest is the LeRobot writer encoding video at
-~27 ms/frame, which is what actually bounds collection.
+Restart the shell afterwards, or `source $HOME/.local/bin/env`, so `uv` is on
+the path. `uv --version` should answer.
 
-Replay regression, 16 episodes — the teacher's own recorded actions fed back
-through the inference loop:
+### Dependency specifications
 
-| | teacher | replay |
-|---|---|---|
-| success | 16/16 | 16/16 |
-| mean travel | 94.6 mm | 94.6 mm |
+Declared in `pyproject.toml`, resolved in `uv.lock`. Nothing is installed by
+hand — `uv sync` reads both.
 
-Max travel difference **0.00 mm**. This is the cheapest test in the project and
-the one that catches the most: if replay diverged, the recorded actions would
-not mean what the eval loop thinks they mean, and the dataset and the
-deployment would be different control problems.
+| Package | Version |
+|---|---|
+| `torch`, `torchvision`, `torchaudio`, `triton` | ROCm 7.2.1 wheels, pinned by URL to `repo.radeon.com` |
+| `genesis-world` | 1.2.3 |
+| `lerobot` | with the `training` and `pi` extras |
+| `bitsandbytes` | ≥0.50 |
 
-## How it works
+The PyTorch wheels are pinned by exact URL rather than by version specifier, so
+the ROCm build is not something the resolver can substitute.
+
+## Setup
+
+### 1. Credentials
+
+```bash
+cp .env.example .env
+```
+
+Then open `.env` and fill in two values:
+
+- **`HF_TOKEN`** — a *read* token from
+  https://huggingface.co/settings/tokens. Used to download `lerobot/pi05_base`
+  and its PaliGemma tokenizer.
+- **`WANDB_API_KEY`** — from https://wandb.ai/authorize. Training logs only;
+  pass `--wandb.enable=false` to train without one.
+
+**Then accept the PaliGemma licence** at
+https://huggingface.co/google/paligemma-3b-pt-224, signed in as the same
+account. This is a separate step from creating the token, and skipping it is the
+most common way setup fails: the tokenizer download returns 403 no matter how
+valid the token is.
+
+`.env` is gitignored and is read by the next step.
+
+### 2. Environment
+
+```bash
+source scripts/instance-env.sh
+```
+
+This does three things:
+
+1. **Points the uv and Hugging Face caches at persistent storage.** A
+   container's own filesystem does not survive a restart, and pi0.5 plus its
+   tokenizer are several GB that are not worth fetching twice.
+2. **Loads `.env`**, exporting `HF_TOKEN` and `WANDB_API_KEY`.
+3. **Switches package and model downloads to mirrors** — `UV_DEFAULT_INDEX` to
+   the Tsinghua PyPI mirror and `HF_ENDPOINT` to `hf-mirror.com`. This matters
+   **if you are running from mainland China**, where PyPI and `huggingface.co`
+   are effectively unreachable. Outside China, either skip this step entirely or
+   export your own values first: every variable it sets honours one already
+   present, so `UV_DEFAULT_INDEX=https://pypi.org/simple` set beforehand wins.
+
+It prints what it set, reporting the two secrets as `set` or `MISSING` without
+echoing them, and appends itself to `~/.bashrc` so later shells pick it up.
+
+### 3. Install
+
+```bash
+uv sync
+```
+
+Installs the ROCm PyTorch stack, Genesis, lerobot and bitsandbytes, and installs
+this project itself so its commands (`render`, `rollout`, `collect`, `train`,
+`evaluate`) exist on the path.
+
+**Source step 2 before this.** Both mirrors replace their upstream rather than
+adding to it, and `UV_DEFAULT_INDEX` decides the URLs written into `uv.lock` —
+so a lock produced in a shell that never sourced it points at the wrong index.
+
+### 4. Check it works
+
+```bash
+uv run render --envs 1
+```
+
+Runs one scripted episode and writes `out/episode.mp4` and
+`out/episode_wrist.mp4`, plus a dump of the derived geometry. It should report
+`success=True`. This exercises the simulator, the renderer and the tactile
+sensors without needing any model weights, so it separates setup problems from
+model problems.
+
+## Reproducing the results
+
+Three stages, in order. Each depends on the previous one's output, and the
+default paths chain automatically.
+
+### 1. Collect the dataset
+
+```bash
+uv run collect
+```
+
+Runs the scripted teacher over 1024 episodes — 8 batches of 128 environments —
+and writes them in LeRobot format to `data/open_drawer`. Only successful
+episodes are recorded. **Takes about 80 minutes** and produces ~256 MB.
+
+Then verify the dataset means what the deployment loop thinks it means:
+
+```bash
+uv run evaluate
+```
+
+This is the replay regression: it feeds the teacher's own recorded actions back
+through the inference loop and checks that the episodes reproduce. It needs no
+checkpoint and takes under a minute. **If it fails, do not train** — the
+recorded actions and the evaluation loop disagree, and a policy trained on them
+would be solving a different control problem.
+
+### 2. Train
+
+```bash
+scripts/train.sh
+```
+
+Fine-tunes pi0.5 with the tactile pathway for 10000 steps at batch 16, using an
+8-bit AdamW. **Takes about 10 hours.** The script launches it detached from the
+terminal, so the session can be closed; it prints the log path and the commands
+to follow, check and stop the run. Checkpoints land in
+`out/train/open_drawer/checkpoints/` every 2500 steps.
+
+```bash
+tail -f out/train-<timestamp>.log        # follow
+ps -p $(cat out/train.pid)               # still alive?
+scripts/train.sh --resume=true           # continue after a crash
+```
+
+To run in the foreground, or to change anything, call the command directly —
+every lerobot flag is passed through and overrides the defaults:
+
+```bash
+uv run train --steps=2000 --batch_size=8 --wandb.enable=false
+```
+
+In wandb, `tactile_cond_norm` and `tactile_cond_ratio` report the magnitude of
+the tactile contribution to the action expert's conditioning. Both start at
+exactly zero by construction, so their climbing is the evidence that touch is
+being used at all.
+
+### 3. Evaluate
+
+```bash
+uv run evaluate --mode policy --envs 8
+```
+
+Runs the trained checkpoint closed-loop in the simulator and scores it by the
+same criteria as the teacher: the target drawer reached its stop, the gripper
+released, the other drawer never moved, and the cabinet stayed put. It also
+reports **release latency** — control steps between the true stop and the
+release — which is the measure of whether the tactile channel is doing its job.
+
+It reads `out/train/open_drawer/checkpoints/last/pretrained_model` by default;
+pass `--checkpoint` for any other.
+
+> Do not evaluate while training is running. Both load a 4B model onto the same
+> GPU.
+
+## Command reference
+
+| Command | What it does |
+|---|---|
+| `uv run render` | Film one teacher episode to mp4, with live task state burned in |
+| `uv run rollout` | Teacher success rate and physics throughput; `--scaling 32,64,128` sweeps |
+| `uv run collect` | Record the LeRobot dataset; `--scaling 8,16,32` probes the host-RAM ceiling |
+| `uv run train` | Fine-tune pi0.5 + tactile |
+| `uv run evaluate` | Replay regression, or `--mode policy` to score a checkpoint |
+| `scripts/instance-env.sh` | Caches, secrets and mirrors (source it) |
+| `scripts/train.sh` | Launch training detached, with disk and duplicate-run checks |
+
+Every command takes `--help`.
+
+## Repository map
 
 ```
 config.py          every tunable, frozen dataclasses; asserts its own geometry
@@ -141,87 +251,5 @@ rollout.py         success rate and throughput
 render_episode.py  mp4 plus the derived-geometry dump
 ```
 
-### Three contracts
-
-**25 Hz is the control rate, not a storage setting.** `robot.apply` issues one
-command per tick and holds it, so the teacher and the policy solve the same
-control problem. Changing it invalidates the dataset.
-
-**An action is a command, not a motion.** The recorded value is
-`q_cmd - q_measured`, which carries the standing error a position-controlled
-arm needs merely to hold itself up against gravity. Recording achieved motion
-would label every hold "do nothing", and a policy obeying that at inference
-releases the offset holding the arm up and sags further every step.
-
-**Tactile is its own dataset feature.** It is never folded into
-`observation.state`. pi0.5 does not feed state to the action expert as a
-vector — it normalizes it, digitizes it into 256 bins and pastes it into the
-text prompt. A contact signal sent through that path arrives 8-bit quantized,
-and one that is quiet for most of an episode and then steps would collapse into
-a bin or two while the event saturates. Kept separate it stays continuous.
-
-### Where touch enters the policy
-
-`policy_tactile.py` subclasses pi0.5 and adds a small MLP whose output is added
-to `adarms_cond` — the single vector that modulates every adaRMSNorm layer in
-the action expert. That puts touch on a continuous path straight into the
-action decoder with no tokenizer in between. The encoder's output layer is
-**zero-initialised**, so on step one the model is bit-identical to pretrained
-pi0.5 and the tactile pathway grows from nothing rather than injecting noise
-into a model that already works.
-
-## Design notes worth knowing
-
-**KinematicTaxel measures penetration, not force.** Its reading is a spring on
-how deep the virtual probes sit inside what they touch. Against a rigid rail
-the pads sink by micrometres under load, and the reading is *flat* — measured
-at 0.19 N through an entire pull, unchanged when the drawer jammed. Two changes
-made the sensor work: giving the rail a compliant contact so the pads sink
-measurably under load, and cutting the grip squeeze so that load dominates the
-reading instead of a large constant preload. The bands are now 0.16–0.23 while
-sliding and 0.28–0.46 against the stop, stepping at each environment's own
-randomized stop. The release threshold sits in that gap and is **measured, not
-chosen**.
-
-**The unanchored cabinet is a force limiter.** Everything the arm pulls passes
-through it, so its static friction `mu * m * g` caps the force anywhere in the
-chain — including at the fingertip, and therefore the top of the sensor's
-range. That puts the design inside a window: the ceiling must sit well above
-the drawer's own sliding friction, or the cabinet creeps during a legitimate
-pull, and well below what the arm can deliver, or it never moves and
-over-pulling costs nothing. Both bounds were hit while tuning.
-
-**Grip force is `kp` times commanded overshoot.** The jaws are commanded
-*through* the rail; they cannot get there, and the standing error is the grip.
-Commanding the rail's own thickness would arrive with no error and apply no
-force at all.
-
-**The wrist camera mount does not transfer from a tool-down task.** The grasp
-orientation carries 90 degrees of wrist yaw, which maps the hand's y axis onto
-world x. A tilt applied as pitch therefore pans the view sideways and never
-toward the cabinet; the lean has to be roll. A 180 degree roll additionally
-inverts the column that `T_to_pos_lookat_up` reads as "up", rendering the scene
-upside down. Both were found by rendering, not by reasoning.
-
-## Status
-
-Exercised: scene construction, per-environment travel stops, the teacher, the
-recorder's shapes against the declared dataset features, the LeRobot write path
-(1024 episodes, none dropped), the replay regression against the dataset on
-disk, and training — `policy_tactile.py` loads `lerobot/pi05_base` and steps
-under the 8-bit optimizer.
-
-`observation.tactile` lands where it was meant to. `dataset_to_policy_features`
-types any `observation.*` key as STATE, so it becomes a policy input and picks
-up normalization statistics, while the state tokenizer reads `observation.state`
-by name and never sees it. Normalized, and not quantized into the prompt.
-
-That confirms the plumbing, not the mechanism. The tactile encoder is
-zero-initialised, so a training run looks identical whether or not touch is
-carrying information — only closed-loop evaluation, and release latency in
-particular, can show that it is.
-
-Not yet done: the full training run, and evaluation of its checkpoint.
-Inference latency per chunk is unmeasured.
-
-The 100% teacher rate is over roughly 1100 episodes.
+Generated directories — `assets/` (rewritten from config on every scene build),
+`data/` and `out/` — are gitignored.
