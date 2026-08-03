@@ -90,9 +90,12 @@ class SceneBundle:
     # ----------------------------------------------------------------- render
     @staticmethod
     def _rgb(cam) -> np.ndarray:
+        """(N, H, W, 3) uint8. Genesis drops the batch dim at n_envs=1, and
+        every caller indexes by env."""
         out = cam.render(rgb=True)
         rgb = out[0] if isinstance(out, tuple) else out
-        return np.ascontiguousarray(npy(rgb)[..., :3].astype(np.uint8))
+        rgb = npy(rgb)[..., :3].astype(np.uint8)
+        return np.ascontiguousarray(rgb[None] if rgb.ndim == 3 else rgb)
 
     def render(self) -> np.ndarray:
         return self._rgb(self.camera)

@@ -49,6 +49,9 @@ def geometry(b, cfg: EnvConfig) -> None:
 
 def write(frames: list[np.ndarray], path: Path, fps: int) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    # cv2 accepts a mis-shaped frame without complaining -- it read a sliced
+    # (W, 3) row as a one-pixel-wide image and wrote a black file.
+    assert frames[0].ndim == 3 and frames[0].shape[2] == 3, frames[0].shape
     h, w = frames[0].shape[:2]
     vw = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
     for f in frames:
