@@ -96,8 +96,13 @@ the scripted teacher in simulation and written in LeRobot format.
 | `action` | 9 | per-joint command deltas |
 | `task` | text | `"open the left drawer"` / `"open the right drawer"` |
 
-Recorded at **25 Hz** (every 4 control steps of a 100 Hz simulation), ~150–165
-frames per episode (~6 s). Only successful episodes are written.
+Recorded at **25 Hz** (every 4 control steps of a 100 Hz simulation). Only
+successful episodes are written.
+
+As collected: **1024 episodes, 170,624 frames**, 166 frames per episode on
+average (6.6 s), recorded in 8 batches of 128 environments. No episode was
+dropped — the teacher succeeded in all 1024. Generation took **81.7 minutes**
+end to end, 12.5 episodes/min; §4 breaks that time down.
 
 Two properties of this dataset are contracts rather than conventions, and both
 are documented at the point of use:
@@ -174,7 +179,22 @@ collection throughput. Device memory is flat at 1.5 G and never binds — the
 constraint is host RAM, which grows at 26 MB per environment because a whole
 batch of frames is held until the episode is written.
 
-_Pending, from the instance run: the host-RAM ceiling for collection; training
+**What actually dominates dataset generation is neither.** The full run —
+1024 episodes in 8 batches of 128 — took 81.7 minutes. Simulation and rendering
+account for about 5 of those (38.3 s per batch, measured above). The remaining
+**94% is the LeRobot writer**, encoding 170,624 frames of wrist video at roughly
+27 ms per frame on CPU.
+
+We keep this rather than presenting the scaling tables alone, because the
+tables are accurate about what they measure and misleading about what matters.
+Both curves, and the host-RAM ceiling that bounds the second, turn out to
+govern 6% of the wall clock: the choice between N=128 and N=256 changes total
+collection time by a few percent, not by the 30% the throughput figures imply.
+Dataset generation here is a single-threaded video-encoding problem wearing a
+GPU-throughput costume, and the only optimization that would move it is
+parallel or hardware-accelerated encoding in the writer.
+
+_Pending, from the instance run: training
 step time and peak memory; inference latency per chunk against the 160 ms budget
 the 16/4 horizon allows._
 

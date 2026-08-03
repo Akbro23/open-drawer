@@ -104,6 +104,10 @@ Batched physics, two episodes per env count — 960 episodes, all successful:
 Eight times the environments for 10% more wall time. Collection is bounded by
 host RAM rather than by this, which is why `collect` has its own probe.
 
+Dataset: **1024 episodes, 170,624 frames**, 0 dropped, in 81.7 min. Only ~5 of
+those minutes are simulation — the rest is the LeRobot writer encoding video at
+~27 ms/frame, which is what actually bounds collection.
+
 Replay regression, 16 episodes — the teacher's own recorded actions fed back
 through the inference loop:
 
