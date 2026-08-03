@@ -200,9 +200,30 @@ Dataset generation here is a single-threaded video-encoding problem wearing a
 GPU-throughput costume, and the only optimization that would move it is
 parallel or hardware-accelerated encoding in the writer.
 
-_Pending, from the instance run: training
-step time and peak memory; inference latency per chunk against the 160 ms budget
-the 16/4 horizon allows._
+**Training, measured.** Ten steps per configuration, everything else at the
+defaults above:
+
+| optimizer | batch | peak memory | step | samples/s |
+|---|---|---|---|---|
+| 8-bit AdamW | 16 | 26.2 GiB | 3.55 s | 4.5 |
+| 8-bit AdamW | 32 | 31.0 GiB | 6.90 s | 4.6 |
+| stock AdamW | 16 | 37.2 GiB | 3.47 s | 4.6 |
+
+Quantizing the moments saves **11 GiB at matched batch size** for a 2% step-time
+cost. The arithmetic predicts 7.7 GiB for halving 4.14B parameters' moment
+state; the remainder is allocator overhead.
+
+Throughput is flat in batch size — doubling the batch doubles the step time
+exactly, so training is compute-bound and a larger batch buys gradient quality
+rather than speed. Batch size is therefore a wall-clock decision rather than a
+throughput one, and we train at **batch 16 with the 8-bit optimizer** for 10000
+steps: ~160k samples, a little under one pass over the dataset, in ~10 hours.
+Memory scales at 0.3 GiB per sample, so neither size approaches the card's
+ceiling; the reason not to take batch 32 is that the same number of updates
+would cost twice the wall clock.
+
+_Pending, from the instance run: inference latency per chunk against the 160 ms
+budget the 16/4 horizon allows._
 
 ## 5. Innovations and key technical contributions
 
