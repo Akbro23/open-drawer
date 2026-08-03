@@ -157,6 +157,23 @@ step count of one lockstep episode almost independently of N, which is the
 result the batched-array design was aiming for; the residual 10% is the only
 part of the pipeline that grows with the batch.
 
+Collection is a different curve, and is measured separately for that reason.
+Repeating the sweep with the wrist camera on and a recorder attached — the
+configuration collection actually uses — separates the two costs, per batch of N
+episodes:
+
+| N | physics only | + rendering | render cost | buffered | device |
+|---|---|---|---|---|---|
+| 32 | 15.8 s | 22.0 s | +6.2 s | 0.8 G | 1.3 G |
+| 64 | 15.7 s | 27.8 s | +12.2 s | 1.6 G | 1.5 G |
+| 128 | 16.7 s | 38.3 s | +21.7 s | 3.3 G | 1.5 G |
+
+Physics is flat in N; rendering doubles with it. Past N≈64 rendering is the
+majority of the cost, so the physics curve above predicts nothing about
+collection throughput. Device memory is flat at 1.5 G and never binds — the
+constraint is host RAM, which grows at 26 MB per environment because a whole
+batch of frames is held until the episode is written.
+
 _Pending, from the instance run: the host-RAM ceiling for collection; training
 step time and peak memory; inference latency per chunk against the 160 ms budget
 the 16/4 horizon allows._
