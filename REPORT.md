@@ -143,9 +143,23 @@ maps shared by reference across parameters).
 same GPU, with the policy serving action chunks from an internal queue so a
 forward pass runs once per chunk rather than once per control step.
 
-_Pending, from the instance run: simulation throughput against N; the host-RAM
-ceiling for collection; training step time and peak memory; inference latency
-per chunk against the 160 ms budget the 16/4 horizon allows._
+Measured batched-physics throughput, two episodes per environment count:
+
+| N | wall | episodes/min | speedup | success |
+|---|---|---|---|---|
+| 32 | 31.6 s | 121.5 | 1.0× | 64/64 |
+| 64 | 31.3 s | 245.6 | 2.0× | 128/128 |
+| 128 | 33.3 s | 461.3 | 3.8× | 256/256 |
+| 256 | 34.8 s | 882.7 | 7.3× | 512/512 |
+
+Eight times the environments for 10% more wall time. The wall clock is the fixed
+step count of one lockstep episode almost independently of N, which is the
+result the batched-array design was aiming for; the residual 10% is the only
+part of the pipeline that grows with the batch.
+
+_Pending, from the instance run: the host-RAM ceiling for collection; training
+step time and peak memory; inference latency per chunk against the 160 ms budget
+the 16/4 horizon allows._
 
 ## 5. Innovations and key technical contributions
 
@@ -223,15 +237,25 @@ selected by `--policy.type` without patching.
 
 ## 7. Results to date
 
-Teacher, 48 episodes at N=16:
+Teacher, 128 episodes at N=64:
 
 | | |
 |---|---|
-| success | 48/48 |
+| success | 128/128 |
+| opened / released | 128/128 / 128/128 |
 | wrong drawer / cabinet dragged | 0 / 0 |
-| shortfall from each episode's stop | mean 0.00 mm |
-| cabinet displacement | mean 0.26 mm, max 1.38 mm (limit 10 mm) |
-| release latency | median 119 control steps |
+| travel | mean 95.9 mm |
+| shortfall from each episode's stop | mean 0.00 mm, max 0.00 mm |
+| cabinet displacement | mean 0.25 mm, max 0.68 mm (limit 10 mm) |
+| release latency | mean 131, median 132, max 205 control steps |
+
+A further 960 episodes across the throughput sweep succeeded without exception.
+
+Release latency is the figure that distinguishes tactile stop detection from a
+task that merely completes: it is bounded well inside the 400-step pull budget,
+so the release is triggered by the measured contact and not by the pull phase
+running out. An episode that never felt its stop would still score as a success
+on every other row of this table.
 
 Replay regression: teacher 16/16, replay 16/16, max travel divergence 0.00 mm.
 

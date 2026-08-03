@@ -80,16 +80,29 @@ uv run evaluate --mode policy          # score the checkpoint in the loop
 
 ## Results
 
-Teacher, 48 episodes at N=16:
+Teacher, 128 episodes at N=64:
 
 | | |
 |---|---|
-| success | 48/48 |
-| opened / released | 48/48 |
+| success | 128/128 |
+| opened / released | 128/128 |
 | wrong drawer, cabinet dragged | 0, 0 |
+| travel | mean 95.9 mm |
 | shortfall from the stop | mean 0.00 mm |
-| cabinet displacement | mean 0.26 mm, max 1.38 mm (limit 10 mm) |
-| release latency | median 119 control steps |
+| cabinet displacement | mean 0.25 mm, max 0.68 mm (limit 10 mm) |
+| release latency | median 132 control steps, max 205 |
+
+Batched physics, two episodes per env count — 960 episodes, all successful:
+
+| N | wall | episodes/min | speedup |
+|---|---|---|---|
+| 32 | 31.6 s | 121.5 | 1.0× |
+| 64 | 31.3 s | 245.6 | 2.0× |
+| 128 | 33.3 s | 461.3 | 3.8× |
+| 256 | 34.8 s | 882.7 | 7.3× |
+
+Eight times the environments for 10% more wall time. Collection is bounded by
+host RAM rather than by this, which is why `collect` has its own probe.
 
 Replay regression, 16 episodes — the teacher's own recorded actions fed back
 through the inference loop:
@@ -200,4 +213,4 @@ checking first — that `observation.tactile` survives
 loading `lerobot/pi05_base` reports `tactile_mlp.*` as missing keys, which is
 expected.
 
-The 100% teacher rate is over roughly 70 episodes, not thousands.
+The 100% teacher rate is over roughly 1100 episodes.
