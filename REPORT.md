@@ -323,6 +323,18 @@ on every other row of this table.
 
 Replay regression: teacher 16/16, replay 16/16, max travel divergence 0.00 mm.
 
+**The training run is one pass, not a converged one.** 10000 steps at batch 16
+is roughly 160k samples — a little under a single epoch of the dataset — and the
+number was set by the hackathon clock at 3.55 s/step, not by a validation curve.
+Memory was never the binding constraint: the card holds batch 32 at 31 GiB and
+scales at 0.3 GiB per sample, so batch 64 was available. But throughput is flat
+in batch size, so a wider batch buys lower gradient variance at the price of
+proportionally fewer updates per hour, and with a fixed budget the updates are
+worth more. Given more time this run would be longer rather than wider — several
+epochs at batch 16, or batch 64 with the step count raised to match. The
+checkpoint's score should be read as a lower bound on what the design reaches,
+not as its ceiling.
+
 _Pending: trained-policy success rate, and its breakdown by failure mode._
 
 ## 8. What we would highlight
