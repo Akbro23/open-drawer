@@ -168,8 +168,11 @@ DEFAULTS = {
     "--scheduler.peak_lr": "2.5e-5",
     "--scheduler.decay_lr": "2.5e-6",
     "--batch_size": "16",
-    "--steps": "4000",
-    "--save_freq": "1000",
+    # ~160k samples, a little under one pass over the dataset, ~10 hours.
+    # A checkpoint is ~17 GB and none are pruned, so save_freq trades disk
+    # against how much of a failed run has to be repeated.
+    "--steps": "10000",
+    "--save_freq": "2500",
     "--log_freq": "100",
     "--num_workers": "4",
     # No gym env for this task -- evaluation runs in Genesis, out of band.
