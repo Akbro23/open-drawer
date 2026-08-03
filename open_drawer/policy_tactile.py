@@ -45,6 +45,8 @@ from lerobot.policies.pi05.modeling_pi05 import (
     PI05Pytorch,
     get_gemma_config,
 )
+from lerobot.policies.pretrained import PreTrainedPolicy
+from lerobot.utils.import_utils import require_package
 
 OBS_TACTILE = "observation.tactile"
 
@@ -102,14 +104,25 @@ class TactilePI05Policy(PI05Policy):
     name = "tactile_pi05"
 
     def __init__(self, config: TactilePI05Config, **kwargs):
-        super().__init__(config, **kwargs)
-        # PI05Policy.__init__ already built a plain PI05Pytorch. Drop it before
-        # allocating the replacement: at 4B parameters, holding both at once is
-        # what turns a swap into an OOM.
-        del self.model
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        # PI05Policy.__init__ is replicated rather than called, because it builds
+        # a plain PI05Pytorch and then applies gradient checkpointing, the device
+        # and reset() TO THAT OBJECT. Calling it and swapping the model
+        # afterwards silently drops all three: --policy.gradient_checkpointing
+        # is honoured on a model that is then discarded, and the replacement
+        # trains without it. That costs most of the activation memory and shows
+        # up only as an OOM at a batch size that should fit.
+        require_package("transformers", extra="pi")
+        PreTrainedPolicy.__init__(self, config)
+        config.validate_features()
+        self.config = config
+
+        self.init_rtc_processor()
         self.model = TactilePI05Pytorch(config, rtc_processor=self.rtc_processor)
+
+        if config.gradient_checkpointing:
+            self.model.gradient_checkpointing_enable()
+        self.model.to(config.device)
+        self.reset()
 
     def _set_tactile(self, batch: dict[str, Tensor]) -> None:
         t = batch.get(OBS_TACTILE)
