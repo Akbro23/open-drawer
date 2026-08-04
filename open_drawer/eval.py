@@ -27,6 +27,7 @@ test in the project and the one that catches the most.
 from __future__ import annotations
 
 import argparse
+import time
 from pathlib import Path
 
 import cv2
@@ -117,11 +118,26 @@ class Pi05Policy:
         self.policy = TactilePI05Policy.from_pretrained(checkpoint).to(device).eval()
         self.pre, self.post = make_pre_post_processors(self.policy.config, checkpoint)
 
+        # Only the ticks that empty the queue actually run the model. reset()
+        # clears it, so a forward pass is exactly every n_action_steps-th tick
+        # -- which beats reading the queue's private length to find out.
+        self.n_action_steps = self.policy.config.n_action_steps
+        self.chunk_ms: list[float] = []
+        self.tick = 0
+
     def reset(self) -> None:
         self.policy.reset()
+        self.tick = 0
 
     def __call__(self, images, state, tactile, prompts) -> np.ndarray:
         torch = self.torch
+        # Timed around the whole call on purpose: the forward is async, and the
+        # .cpu() at the end is what forces it to finish. Timing the model call
+        # alone would measure kernel launches.
+        forward = self.tick % self.n_action_steps == 0
+        self.tick += 1
+        t0 = time.perf_counter()
+
         batch = {f"observation.images.{k}":
                  torch.from_numpy(v).to(self.device)
                       .permute(0, 3, 1, 2).float().div_(255.0)
@@ -132,7 +148,11 @@ class Pi05Policy:
 
         with torch.no_grad():
             action = self.policy.select_action(self.pre(batch))
-        return self.post(action).cpu().numpy()
+        out = self.post(action).cpu().numpy()
+
+        if forward:
+            self.chunk_ms.append(1e3 * (time.perf_counter() - t0))
+        return out
 
 
 def _film(b: SceneBundle, e: int, frames: list) -> None:
@@ -232,6 +252,16 @@ def evaluate(cfg: EnvConfig, batches: int, checkpoint: str, ticks: int, *,
     if len(lat):
         print(f"  release latency mean {lat.mean():.0f} steps, "
               f"median {np.median(lat):.0f}")
+
+    # The budget is how long the chunk it just produced will take to play out.
+    # Over it, the arm waits between chunks; the trajectory is unaffected but
+    # the loop no longer runs in real time.
+    ms = np.array(policy.chunk_ms[1:])   # the first includes warm-up
+    if len(ms):
+        budget = 1e3 * cfg.dt * cfg.record_every * policy.n_action_steps
+        print(f"  inference     median {np.median(ms):.0f} ms/chunk, "
+              f"mean {ms.mean():.0f}, max {ms.max():.0f}  "
+              f"(budget {budget:.0f} ms at N={cfg.n_envs})")
 
 
 def main() -> None:
