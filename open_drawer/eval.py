@@ -1,8 +1,8 @@
 """Run a policy in the loop, and score it the same way the teacher is scored.
 
-    uv run evaluate                                   # replay; needs no lerobot
-    uv run evaluate --mode policy --checkpoint out/train/open_drawer/...
-    uv run evaluate --mode policy --video out/eval.mp4
+    uv run evaluate                                   # score the last checkpoint
+    uv run evaluate --video out/eval.mp4              # ...and film one env
+    uv run evaluate --regression                      # replay; needs no lerobot
 
 This is the other half of `record.py`. That module defines what an action MEANS;
 this one is the only place that has to interpret it, and it has to interpret it
@@ -266,9 +266,11 @@ def evaluate(cfg: EnvConfig, batches: int, checkpoint: str, ticks: int, *,
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="run a policy in the loop")
-    ap.add_argument("--mode", choices=("replay", "policy"), default="replay")
-    ap.add_argument("--envs", type=int, default=8)
-    ap.add_argument("--batches", type=int, default=1)
+    ap.add_argument("--regression", action="store_true",
+                    help="replay the teacher's own actions instead of scoring a "
+                         "checkpoint; needs neither weights nor lerobot")
+    ap.add_argument("--envs", type=int)
+    ap.add_argument("--batches", type=int)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--ticks", type=int, default=200,
                     help="action ticks per episode under policy control; 200 is "
@@ -278,18 +280,23 @@ def main() -> None:
     ap.add_argument("--env", type=int, default=0, help="which env to film")
     args = ap.parse_args()
 
+    # The regression only has to reproduce the teacher, so one small batch
+    # answers it; a success rate needs episodes to average over.
+    envs = args.envs or (8 if args.regression else 16)
+    batches = args.batches or (1 if args.regression else 4)
+
     gs.init(backend=gs.gpu, logging_level="warning")
     # The free camera is only built when it is going to be used: it is not an
     # observation, and rendering it costs a frame per tick.
-    cfg = EnvConfig(n_envs=args.envs, seed=args.seed, add_wrist_cams=True,
+    cfg = EnvConfig(n_envs=envs, seed=args.seed, add_wrist_cams=True,
                     add_camera=bool(args.video))
 
-    if args.mode == "replay":
-        replay(cfg, args.batches)
+    if args.regression:
+        replay(cfg, batches)
         return
     if not Path(args.checkpoint).exists():
         raise SystemExit(f"no checkpoint at {args.checkpoint}")
-    evaluate(cfg, args.batches, args.checkpoint, args.ticks,
+    evaluate(cfg, batches, args.checkpoint, args.ticks,
              video=args.video, env=args.env)
 
 

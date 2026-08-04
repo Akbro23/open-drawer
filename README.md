@@ -182,7 +182,7 @@ episodes are recorded. **Takes about 80 minutes** and produces ~256 MB.
 Then verify the dataset means what the deployment loop thinks it means:
 
 ```bash
-uv run evaluate
+uv run evaluate --regression
 ```
 
 This is the replay regression: it feeds the teacher's own recorded actions back
@@ -224,7 +224,7 @@ being used at all.
 ### 3. Evaluate
 
 ```bash
-uv run evaluate --mode policy --envs 16 --batches 4
+uv run evaluate
 ```
 
 Runs the trained checkpoint closed-loop in the simulator and scores it by the
@@ -233,8 +233,10 @@ released, the other drawer never moved, and the cabinet stayed put. It also
 reports **release latency** — control steps between the true stop and the
 release — which is the measure of whether the tactile channel is doing its job.
 
-It reads `out/train/open_drawer/checkpoints/last/pretrained_model` by default;
-pass `--checkpoint` for any other. Add `--video out/eval.mp4` to film one
+It scores 64 episodes — 4 batches of 16 environments, `--envs` and `--batches`
+to change that — reading
+`out/train/open_drawer/checkpoints/last/pretrained_model` unless `--checkpoint`
+says otherwise. Add `--video out/eval.mp4` to film one
 environment of the first batch, with the live task state burned in — this is
 how the demonstration video above was made.
 
@@ -249,7 +251,7 @@ how the demonstration video above was made.
 | `uv run rollout` | Teacher success rate and physics throughput; `--scaling 32,64,128` sweeps |
 | `uv run collect` | Record the LeRobot dataset; `--scaling 8,16,32` probes the host-RAM ceiling |
 | `uv run train` | Fine-tune pi0.5 + tactile |
-| `uv run evaluate` | Replay regression, or `--mode policy` to score a checkpoint |
+| `uv run evaluate` | Score a checkpoint closed-loop; `--regression` replays the teacher instead |
 | `scripts/instance-env.sh` | Caches, secrets and mirrors (source it) |
 | `scripts/train.sh` | Launch training detached, with disk and duplicate-run checks |
 
