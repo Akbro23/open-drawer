@@ -6,9 +6,6 @@ lets go — in Genesis, with pi0.5 conditioned on a fingertip tactile array.
 
 ## Demonstration
 
-Travel against the episode's own stop, the tactile reading and the cabinet's
-displacement are burned into every frame.
-
 ### Scripted teacher
 
 One episode, shown twice. The only difference is whether the tactile release can
