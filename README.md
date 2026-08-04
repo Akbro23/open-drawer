@@ -279,3 +279,25 @@ render_episode.py  mp4 plus the derived-geometry dump
 
 Generated directories — `assets/` (rewritten from config on every scene build),
 `data/` and `out/` — are gitignored.
+
+## Credits
+
+The pipeline this project started from — Genesis scene, scripted teacher,
+LeRobot dataset, policy fine-tune and closed-loop evaluation, all on a single
+Radeon — follows the shape of
+[wangxunx/franka_fruit_pick_demo](https://github.com/wangxunx/franka_fruit_pick_demo).
+
+Built on [Genesis](https://github.com/Genesis-Embodied-AI/Genesis) and
+[LeRobot](https://github.com/huggingface/lerobot), both Apache-2.0. The weights
+are `lerobot/pi05_base`, LeRobot's port of
+[openpi](https://github.com/Physical-Intelligence/openpi) by Physical
+Intelligence; [policy_tactile.py](open_drawer/policy_tactile.py) subclasses that
+implementation and replicates one initializer from it, for the reason given
+there. The Franka Panda description arrives with Genesis and is
+[MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie)'s
+(Apache-2.0), derived from Franka Emika's published URDF. The cabinet is
+generated from `config.py`.
+
+pi0.5 is built on PaliGemma, so the checkpoint produced here inherits its
+licence: *Gemma is provided under and subject to the Gemma Terms of Use found at
+[ai.google.dev/gemma/terms](https://ai.google.dev/gemma/terms)*.
