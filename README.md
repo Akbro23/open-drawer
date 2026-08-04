@@ -15,32 +15,30 @@ configuration.
 
 ## Demonstration
 
-The scripted teacher opens the drawer the prompt names, pulls until it feels the
-stop, and lets go. Travel against this episode's own stop, the tactile reading
-and the cabinet's displacement are burned into the frame.
+Travel against the episode's own stop, the tactile reading and the cabinet's
+displacement are burned into every frame.
 
-![Teacher opening the left drawer and releasing on the felt stop](media/teacher_demo.gif)
+### Scripted teacher
 
-The same episode with one thing changed: the tactile release is put out of
-reach, so the arm keeps pulling. The drawer is already at its stop by the
-halfway mark, and what moves after that is the cabinet — 92 mm across the table,
-against 0.3 mm when the release works.
+One episode, shown twice. The only difference is whether the tactile release can
+fire — on the right it is put out of reach, so the arm pulls for the full budget
+and what moves is the furniture.
 
-![The same episode with the tactile release disabled, dragging the cabinet](media/over_pull.gif)
+| Releasing on the felt stop | Same episode, release disabled |
+|---|---|
+| ![Teacher opening the left drawer and releasing on the felt stop](media/teacher_demo.gif) | ![The same episode with the tactile release disabled, dragging the cabinet](media/over_pull.gif) |
+| cabinet moves **0.3 mm** | cabinet moves **92 mm** |
 
-And the fine-tuned policy driving the same loop. It completes the task on about
+### Trained policy
+
+The fine-tuned checkpoint driving the same loop. It completes the task on about
 a third of episodes, so both outcomes are here — the failure is the more
-informative of the two.
+informative one, and it is not a language, vision or touch failure.
 
-It reaches this episode's stop at 111.1 mm and lets go, having had no way to see
-where that stop was:
-
-![The trained policy opening the drawer and releasing](media/policy_success.gif)
-
-The dominant failure, and it is not a language, vision or touch failure — the
-drawer simply never moves. Two thirds of the failed episodes end like this:
-
-![The trained policy failing to move the drawer](media/policy_fail.gif)
+| Reaches the stop and releases | Never moves the drawer |
+|---|---|
+| ![The trained policy opening the drawer and releasing](media/policy_success.gif) | ![The trained policy failing to move the drawer](media/policy_fail.gif) |
+| stop found at **111.1 mm**, unseen until felt | by far the **most common failure** |
 
 ## Overview
 
