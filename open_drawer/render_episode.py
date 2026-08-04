@@ -7,10 +7,12 @@ workspace boundary that binds, not the outer one.
 
     uv run render
     uv run render --envs 4 --env 2 --nominal
+    uv run render --over-pull --name over_pull
 """
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 from pathlib import Path
 
 import cv2
@@ -68,13 +70,22 @@ def main() -> None:
     ap.add_argument("--every", type=int, default=4, help="film every Nth control step")
     ap.add_argument("--fps", type=int, default=25)
     ap.add_argument("--out", default="out")
+    ap.add_argument("--name", default="episode", help="basename for the mp4s")
     ap.add_argument("--nominal", action="store_true",
                     help="zero the cabinet jitter, to check the layout itself")
+    ap.add_argument("--over-pull", action="store_true",
+                    help="put the release threshold out of reach, so the arm "
+                         "pulls into the stop for the whole budget")
     args = ap.parse_args()
 
     gs.init(backend=gs.gpu, logging_level="warning")
     cfg = EnvConfig(n_envs=args.envs, seed=args.seed,
                     add_camera=True, add_wrist_cams=True)
+    if args.over_pull:
+        # The release is what keeps the pull safe, so the only way to film what
+        # it prevents is to make it unreachable: `pull` then ramps for all
+        # pull_steps instead of stopping when the stop is felt.
+        cfg = replace(cfg, teacher=replace(cfg.teacher, release_force=np.inf))
     b = build_scene(cfg)
 
     rng = np.random.default_rng(cfg.seed)
@@ -117,8 +128,8 @@ def main() -> None:
     print(f"all envs: success {r.success.sum()}/{r.n}")
 
     out = Path(args.out)
-    write(free, out / "episode.mp4", args.fps)
-    write(wrist, out / "episode_wrist.mp4", args.fps)
+    write(free, out / f"{args.name}.mp4", args.fps)
+    write(wrist, out / f"{args.name}_wrist.mp4", args.fps)
 
 
 if __name__ == "__main__":

@@ -202,7 +202,7 @@ being used at all.
 ### 3. Evaluate
 
 ```bash
-uv run evaluate --mode policy --envs 8
+uv run evaluate --mode policy --envs 16 --batches 4
 ```
 
 Runs the trained checkpoint closed-loop in the simulator and scores it by the

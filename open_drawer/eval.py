@@ -240,8 +240,9 @@ def main() -> None:
     ap.add_argument("--envs", type=int, default=8)
     ap.add_argument("--batches", type=int, default=1)
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--ticks", type=int, default=200,
-                    help="action ticks per episode under policy control")
+    ap.add_argument("--ticks", type=int, default=250,
+                    help="action ticks per episode under policy control; 250 is "
+                         "10 s, against demonstrations averaging 6.6 s")
     ap.add_argument("--checkpoint", default=CHECKPOINT)
     ap.add_argument("--video", help="film one env of the first batch to this mp4")
     ap.add_argument("--env", type=int, default=0, help="which env to film")
