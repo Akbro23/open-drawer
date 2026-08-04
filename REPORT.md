@@ -487,25 +487,28 @@ ceiling.
 
 ## 7. Upstream contributions
 
-Two gaps in the underlying libraries surfaced while building this. Both are
-suitable for patches upstream, and both are **still to be done** — they are
-recorded here as intended follow-ups, not as work already submitted.
+Filed against Genesis during the competition:
 
-**Genesis — `RigidEntity.set_dofs_limit`.** `RigidEntity` exposes
-`get_dofs_limit` and every sibling DOF setter, but no matching
-`set_dofs_limit`, even though the batched implementation already exists one
-level down on the solver. This project reaches past the entity to
-`scene.rigid_solver.set_dofs_limit` with global DOF indices; an entity-level
-wrapper taking local indices would make per-environment joint limits a
-first-class operation instead of an implementation detail callers have to know
-about.
+- **`RigidEntity.set_dofs_limit`** — [issue #3168][i3168], [PR #3170][p3170].
+  `limit` was the only DOF property with an entity getter and no setter, so this
+  project reaches past the entity to the solver with scene-global indices. The
+  patch mirrors `set_dofs_force_range`.
+- **`plan_path` plans against build-time limits** — [issue #3173][i3173]. Found
+  while reading how limits are stored: `q_limit` is snapshotted at build, so
+  after narrowing a joint's range the planner accepts a goal beyond the enforced
+  limit and returns a trajectory the solver stops 1.49 rad short of.
+- **A stale comment in the speed benchmark** — [PR #3174][p3174].
 
-**LeRobot — a registry for the policy factory.** `make_policy` resolves policy
-classes through a hardcoded if/elif chain, so an externally defined policy
-cannot be selected by `--policy.type` without patching the factory itself. A
-registration decorator — matching the one `OptimizerConfig` already provides,
-and which this project uses for its 8-bit optimizer — would let third-party
-policies plug in unmodified.
+Not submitted: LeRobot's `make_policy` resolves policy classes through a
+hardcoded if/elif chain, so an externally defined policy cannot be selected by
+`--policy.type` without patching the factory. A registration decorator, matching
+the one `OptimizerConfig` already provides and which this project uses for its
+8-bit optimizer, would let third-party policies plug in unmodified.
+
+[i3168]: https://github.com/Genesis-Embodied-AI/genesis-world/issues/3168
+[p3170]: https://github.com/Genesis-Embodied-AI/genesis-world/pull/3170
+[i3173]: https://github.com/Genesis-Embodied-AI/genesis-world/issues/3173
+[p3174]: https://github.com/Genesis-Embodied-AI/genesis-world/pull/3174
 
 ## 8. Team
 
