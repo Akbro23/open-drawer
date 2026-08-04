@@ -172,7 +172,30 @@ maps shared by reference across parameters).
 
 **Inference.** Closed-loop evaluation runs policy inference and physics on the
 same GPU, with the policy serving action chunks from an internal queue so a
-forward pass runs once per chunk rather than once per control step.
+forward pass runs once per chunk rather than once per control step. Timed at the
+chunk boundaries, around the whole call — the forward is asynchronous, so a
+narrower measurement would time kernel launches rather than work:
+
+| environments | per forward pass | per environment | budget |
+|---|---|---|---|
+| 1 | median 349 ms, max 361 | 349 ms | 160 ms |
+| 16 | median 2190 ms, max 2215 | 137 ms | 160 ms |
+
+The budget is what a chunk buys: `n_action_steps` = 4 actions at the 25 Hz
+control rate, so 160 ms before the next forward pass is due.
+
+Two things follow. **Batching is 2.5× more efficient per environment** — 137 ms
+against 349 — so at N=1 the model is bound by launch overhead and memory traffic
+rather than by arithmetic, and the card is underused. Aggregate throughput is
+already inside the budget.
+
+**A single robot is not, at 349 ms against 160.** That gap closes without
+retraining. `n_action_steps` is an inference-time parameter, and `chunk_size` is
+16 — the policy predicts 16 actions and currently executes 4 of them before
+asking again. Executing 10 raises the budget to 400 ms and clears the measured
+349 with margin, at the cost of a longer open-loop window between observations.
+Whether that trade is acceptable is a control question rather than a compute
+one, and the checkpoint supports either answer as it stands.
 
 Measured throughput of the scripted teacher with no cameras in the scene, so the
 figures are physics alone. Two batches at each N:
