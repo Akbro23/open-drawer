@@ -499,16 +499,21 @@ Filed against Genesis during the competition:
   limit and returns a trajectory the solver stops 1.49 rad short of.
 - **A stale comment in the speed benchmark** — [PR #3174][p3174].
 
-Not submitted: LeRobot's `make_policy` resolves policy classes through a
-hardcoded if/elif chain, so an externally defined policy cannot be selected by
-`--policy.type` without patching the factory. A registration decorator, matching
-the one `OptimizerConfig` already provides and which this project uses for its
-8-bit optimizer, would let third-party policies plug in unmodified.
+And against LeRobot:
+
+- **The ROCm install path was undocumented** — [PR #4330][p4330]. The
+  installation guide's accelerator section showed CUDA indexes only, while ROCm
+  reaches the same wheels through the same two mechanisms and appeared once, as
+  `rocm*` in a list of values, in the tab a source install does not read. The
+  patch gives AMD an entry wherever NVIDIA has one. Both commands were checked
+  on the Radeon Pro W7900D this project trains on: `--torch-backend rocm7.2`
+  resolves LeRobot 0.6.1 against `torch 2.11.0+rocm7.2`.
 
 [i3168]: https://github.com/Genesis-Embodied-AI/genesis-world/issues/3168
 [p3170]: https://github.com/Genesis-Embodied-AI/genesis-world/pull/3170
 [i3173]: https://github.com/Genesis-Embodied-AI/genesis-world/issues/3173
 [p3174]: https://github.com/Genesis-Embodied-AI/genesis-world/pull/3174
+[p4330]: https://github.com/huggingface/lerobot/pull/4330
 
 ## 8. Team
 
