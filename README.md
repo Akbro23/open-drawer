@@ -13,7 +13,20 @@ lets go — in Genesis, with pi0.5 conditioned on a fingertip tactile array.
 and the reasoning behind the task design, the tactile pathway and the training
 configuration.
 
-**Demonstration video:** _link_
+## Demonstration
+
+The scripted teacher opens the drawer the prompt names, pulls until it feels the
+stop, and lets go. Travel against this episode's own stop, the tactile reading
+and the cabinet's displacement are burned into the frame.
+
+![Teacher opening the left drawer and releasing on the felt stop](media/teacher_demo.gif)
+
+The same episode with one thing changed: the tactile release is put out of
+reach, so the arm keeps pulling. The drawer is already at its stop by the
+halfway mark, and what moves after that is the cabinet — 92 mm across the table,
+against 0.3 mm when the release works.
+
+![The same episode with the tactile release disabled, dragging the cabinet](media/over_pull.gif)
 
 ## Overview
 
