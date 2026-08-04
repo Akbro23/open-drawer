@@ -4,15 +4,6 @@ Language-conditioned, touch-gated drawer opening. A Franka Panda opens the
 drawer a prompt names, pulls it to a stop it cannot see, feels the stop, and
 lets go — in Genesis, with pi0.5 conditioned on a fingertip tactile array.
 
-```
-"open the left drawer"  ->  approach  ->  descend onto the rail  ->  grip
-                        ->  pull  ->  feel the stop  ->  release  ->  retract
-```
-
-**Technical report:** [REPORT.md](REPORT.md) — measurements, scaling results,
-and the reasoning behind the task design, the tactile pathway and the training
-configuration.
-
 ## Demonstration
 
 Travel against the episode's own stop, the tactile reading and the cabinet's
@@ -40,7 +31,16 @@ informative one, and it is not a language, vision or touch failure.
 | ![The trained policy opening the drawer and releasing](media/policy_success.gif) | ![The trained policy failing to move the drawer](media/policy_fail.gif) |
 | stop found at **111.1 mm**, unseen until felt | by far the **most common failure** |
 
+**Technical report:** [REPORT.md](REPORT.md) — measurements, scaling results,
+and the reasoning behind the task design, the tactile pathway and the training
+configuration.
+
 ## Overview
+
+```
+"open the left drawer"  ->  approach  ->  descend onto the rail  ->  grip
+                        ->  pull  ->  feel the stop  ->  release  ->  retract
+```
 
 A two-drawer cabinet stands free on a table. Three properties make each of the
 three modalities load-bearing rather than decorative:
