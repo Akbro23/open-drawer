@@ -28,6 +28,20 @@ against 0.3 mm when the release works.
 
 ![The same episode with the tactile release disabled, dragging the cabinet](media/over_pull.gif)
 
+And the fine-tuned policy driving the same loop. It completes the task on about
+a third of episodes, so both outcomes are here — the failure is the more
+informative of the two.
+
+It reaches this episode's stop at 111.1 mm and lets go, having had no way to see
+where that stop was:
+
+![The trained policy opening the drawer and releasing](media/policy_success.gif)
+
+The dominant failure, and it is not a language, vision or touch failure — the
+drawer simply never moves. Two thirds of the failed episodes end like this:
+
+![The trained policy failing to move the drawer](media/policy_fail.gif)
+
 ## Overview
 
 A two-drawer cabinet stands free on a table. Three properties make each of the
