@@ -2,13 +2,27 @@
 
 **Track 3: Physical AI Challenge**
 
-A Franka Panda opens the drawer a language prompt names, pulls it to a travel
-stop it has no way of seeing, detects that stop through fingertip tactile
-sensing, and releases — implemented in Genesis and learned with a pi0.5
-vision-language-action policy extended with a tactile conditioning pathway.
+A Franka Panda opens the drawer a language prompt asks for — one of two that are
+geometrically and visually identical. It pulls until the drawer meets a travel
+stop, a limit randomized every episode that nothing in the scene reveals, feels
+that stop through a fingertip tactile array, and releases.
 
-> Sections marked _Pending_ are measurements that require the full instance
-> run; they are left explicit rather than estimated.
+The environment is built in Genesis. The policy is pi0.5, a vision-language-action
+model, fine-tuned with a tactile conditioning pathway added to its action expert.
+
+## Deliverables
+
+- **Source repository** — parametric Genesis environment, scripted teacher,
+  dataset collection, policy extension, training and closed-loop evaluation.
+- **Reproducibility README** — setup, dependencies, and the command sequence
+  that reproduces the reported numbers.
+- **Demonstration video** — produced by `uv run render` for the teacher and by
+  `uv run evaluate --video` for the policy, both with live task state (travel
+  against the episode's stop, tactile reading, cabinet displacement) burned into
+  the frame.
+- **Dataset** — 1024 LeRobot-format demonstrations, 170,624 frames.
+- **Fine-tuned checkpoint** at 10000 steps, and the closed-loop evaluation in §6.
+- **This report.**
 
 ---
 
@@ -16,26 +30,34 @@ vision-language-action policy extended with a tactile conditioning pathway.
 
 **Articulated-object manipulation with an unknown mechanical limit.**
 
-Opening a drawer is the canonical instance of a much broader industrial
-problem: manipulating an object whose kinematics are constrained by a mechanism
-you cannot observe. The robot can see a handle; it cannot see the slide rail,
-the stop, or how far the mechanism will travel before it binds. The same
-structure appears in opening doors, cabinets and panels, extracting trays from
-racks, operating levers and valves, and any assembly step that ends when a part
-seats rather than after a fixed distance.
+Every drawer ends somewhere, and the robot cannot know where. It sees a handle —
+not where the rail ends, not where the stop sits, not how far the mechanism will
+travel before it binds. Nor is the limit always where the design put it: drawers
+jam on their contents, rails bend, something gets in the way. The same shape
+governs doors, cabinets and panels; trays in racks; levers and valves; any
+assembly step that ends when a part seats rather than after a fixed distance. In
+all of them the moment to stop belongs to the mechanism, not to the plan.
 
-The failure mode is what makes it worth solving. A robot that treats "open the
-drawer" as a fixed displacement either stops short — leaving the task
-incomplete — or keeps pulling into a mechanism that has already bottomed out,
-which in the real world means damaged furniture, a torn-out drawer, a dragged
-cabinet, or a protective stop on the arm. Neither is acceptable in a home, a
-warehouse aisle, or a laboratory.
+A policy that treats "open the drawer" as a fixed displacement is therefore
+guessing, and the two ways of guessing wrong are not equal. Stopping short costs
+a retry. Pulling past the limit costs the equipment — damaged furniture, a
+torn-out drawer, a dragged cabinet, a broken slide, an arm tripping its own
+protective stop. Force removes the guess. It reports the limit at the instant
+the limit arrives, designed stop or jam or obstruction alike, and all three call
+for the same response: stop pulling. A robot acting on contact stops because the
+mechanism told it to, not because a counter ran out — which is what makes it
+safe to work against hardware it has never seen, in a home, a warehouse aisle or
+a laboratory.
 
-Our formulation makes all three modalities strictly necessary:
+The task here is the smallest honest version of that problem. A cabinet stands
+free on a table with two drawers, left and right. A prompt asks for one of them:
+"open the left drawer". The drawer it names stops at a limit that can only be
+felt. Nothing in that arrangement is decoration; each modality decides something
+the other two cannot supply.
 
 | Modality | Decides | Why it cannot be skipped |
 |---|---|---|
-| Language | *which* drawer | The two drawers are visually identical; nothing else disambiguates the goal |
+| Language | *which* drawer | The drawers are identical — only the prompt says left or right |
 | Vision | *where* the handle is | The cabinet's pose is randomized per episode |
 | Touch | *when* to stop | The travel stop is randomized and invisible to any camera |
 
@@ -121,8 +143,6 @@ are documented at the point of use:
 - **Tactile is a separate feature, never merged into `observation.state`** —
   see §5.
 
-_Pending: final dataset size and on-disk footprint from the collection run._
-
 ## 4. Use of AMD Radeon GPU and ROCm
 
 Every stage of the pipeline runs on a single Radeon GPU through ROCm.
@@ -154,14 +174,15 @@ maps shared by reference across parameters).
 same GPU, with the policy serving action chunks from an internal queue so a
 forward pass runs once per chunk rather than once per control step.
 
-Measured batched-physics throughput, two episodes per environment count:
+Measured throughput of the scripted teacher with no cameras in the scene, so the
+figures are physics alone. Two batches at each N:
 
-| N | wall | episodes/min | speedup | success |
-|---|---|---|---|---|
-| 32 | 31.6 s | 121.5 | 1.0× | 64/64 |
-| 64 | 31.3 s | 245.6 | 2.0× | 128/128 |
-| 128 | 33.3 s | 461.3 | 3.8× | 256/256 |
-| 256 | 34.8 s | 882.7 | 7.3× | 512/512 |
+| N (envs) | batches | episodes | wall | episodes/min | speedup | success |
+|---|---|---|---|---|---|---|
+| 32 | 2 | 64 | 31.6 s | 121.5 | 1.0× | 64/64 |
+| 64 | 2 | 128 | 31.3 s | 245.6 | 2.0× | 128/128 |
+| 128 | 2 | 256 | 33.3 s | 461.3 | 3.8× | 256/256 |
+| 256 | 2 | 512 | 34.8 s | 882.7 | 7.3× | 512/512 |
 
 Eight times the environments for 10% more wall time. The wall clock is the fixed
 step count of one lockstep episode almost independently of N, which is the
@@ -170,14 +191,19 @@ part of the pipeline that grows with the batch.
 
 Collection is a different curve, and is measured separately for that reason.
 Repeating the sweep with the wrist camera on and a recorder attached — the
-configuration collection actually uses — separates the two costs, per batch of N
-episodes:
+configuration collection actually uses — separates the two costs. One batch at
+each N here rather than two, so the physics column is the table above halved:
 
-| N | physics only | + rendering | render cost | buffered | device |
+| N (envs) | physics only | + rendering | render cost | buffered | device |
 |---|---|---|---|---|---|
 | 32 | 15.8 s | 22.0 s | +6.2 s | 0.8 G | 1.3 G |
 | 64 | 15.7 s | 27.8 s | +12.2 s | 1.6 G | 1.5 G |
 | 128 | 16.7 s | 38.3 s | +21.7 s | 3.3 G | 1.5 G |
+
+**buffered** is host RAM held by the recorder — a whole batch of frames, kept
+until the episode is written. **device** is whole-device GPU memory rather than
+torch's own accounting, because Genesis allocates its physics and renderer
+outside the torch allocator, which is most of what is resident here.
 
 Physics is flat in N; rendering doubles with it. Past N≈64 rendering is the
 majority of the cost, so the physics curve above predicts nothing about
@@ -191,7 +217,7 @@ account for about 5 of those (38.3 s per batch, measured above). The remaining
 **94% is the LeRobot writer**, encoding 170,624 frames of wrist video at roughly
 27 ms per frame on CPU.
 
-We keep this rather than presenting the scaling tables alone, because the
+This is kept alongside the scaling tables rather than replaced by them, because the
 tables are accurate about what they measure and misleading about what matters.
 Both curves, and the host-RAM ceiling that bounds the second, turn out to
 govern 6% of the wall clock: the choice between N=128 and N=256 changes total
@@ -216,14 +242,23 @@ state; the remainder is allocator overhead.
 Throughput is flat in batch size — doubling the batch doubles the step time
 exactly, so training is compute-bound and a larger batch buys gradient quality
 rather than speed. Batch size is therefore a wall-clock decision rather than a
-throughput one, and we train at **batch 16 with the 8-bit optimizer** for 10000
+throughput one, and training runs at **batch 16 with the 8-bit optimizer** for 10000
 steps: ~160k samples, a little under one pass over the dataset, in ~10 hours.
 Memory scales at 0.3 GiB per sample, so neither size approaches the card's
 ceiling; the reason not to take batch 32 is that the same number of updates
 would cost twice the wall clock.
 
-_Pending, from the instance run: inference latency per chunk against the 160 ms
-budget the 16/4 horizon allows._
+Weights & Biases recorded the card itself across the ten-hour run:
+
+![GPU utilization over the training run](media/gpu_utilization.png)
+
+![GPU memory allocated over the training run](media/gpu_memory_allocated.png)
+
+Utilization sits pinned at 100% with brief dips for checkpoint writes and
+dataloader stalls, which is what compute-bound looks like and corroborates the
+flat throughput above — there is no idle time a larger batch could absorb.
+Allocated memory is flat at 57% for the entire run: the batch-16 footprint with
+the 8-bit optimizer, and visibly the headroom that §6 revisits.
 
 ## 5. Innovations and key technical contributions
 
@@ -231,17 +266,21 @@ budget the 16/4 horizon allows._
 pi0.5 does not feed `observation.state` to the action expert as a vector: it
 normalizes it, digitizes it into 256 bins, and pastes it into the *text prompt*
 alongside the task string. Appending a force signal there would send it through
-the tokenizer 8-bit quantized — and our signal is quiet for most of an episode
+the tokenizer 8-bit quantized — and this signal is quiet for most of an episode
 and then steps, so per-dimension normalization would collapse the quiet
 majority into one or two bins while the contact event saturates. Precisely the
 wrong channel for the one transient the task turns on.
 
 Instead, a small MLP encodes the 24-dim taxel field and its output is **added to
 `adarms_cond`**, the single vector that modulates every adaRMSNorm layer in the
-action expert. This puts touch on a continuous path directly into the action
-decoder with no tokenizer in between. The encoder's output layer is
-**zero-initialised**, so at step 0 the model is bit-identical to pretrained
-pi0.5 and the tactile pathway grows from zero rather than perturbing a working
+action expert. In stock pi0.5 that vector is a function of the flow-matching
+timestep and nothing else: it tells the expert where it is in the denoising
+process. Adding the tactile encoding to it puts touch on the same continuous
+path, straight into the action decoder with no tokenizer in between — so the
+expert is modulated by when it is in the denoising process *and* by what the
+fingers feel. The encoder's output layer is **zero-initialised**, so at step 0
+the sum is exactly the timestep vector, the model is bit-identical to pretrained
+pi0.5, and the tactile pathway grows from zero rather than perturbing a working
 4B model.
 
 The same zero initialization that makes the pathway safe also makes it
@@ -250,6 +289,22 @@ curve to one in which it carries everything. The norm of the tactile
 contribution, and its ratio to the timestep conditioning it is added to, are
 therefore logged every step — they are the only evidence during training that
 the modality is being used at all.
+
+![Norm of the tactile contribution to adarms_cond](media/tactile_cond_norm.png)
+
+![Ratio of the tactile contribution to the timestep conditioning](media/tactile_cond_ratio.png)
+
+Both start at exactly zero, by construction. Within roughly 500 steps the norm
+reaches 3.0 and the ratio peaks just above 1.0: the model reaches for touch
+immediately, and briefly weights it as heavily as the flow-matching timestep it
+is added to. It then settles to a plateau near 0.75 by step 4000 — tactile
+contributes about three quarters of the magnitude of the conditioning vector it
+shares, which is substantial without swamping it.
+
+Over the final third both drift back up, the ratio from roughly 0.72 to 0.85.
+The signal is noisy and carries little on its own, but it is the
+training-side counterpart to the improvement in release behaviour that §6
+measures over the same interval.
 
 **(b) An invisible, per-environment task parameter.**
 Each drawer's travel stop is randomized *per environment* using Genesis's
@@ -260,7 +315,7 @@ close the loop on touch rather than on memorized geometry.
 **(c) Task design that makes the modality necessary.**
 An earlier formulation of this task is degenerate: with a hard stop and no
 penalty, a policy that pulls for the maximum duration and then opens its jaws
-succeeds every time without ever using touch. We resolved this physically
+succeeds every time without ever using touch. This is resolved physically
 rather than with a scoring rule — the cabinet is unanchored, so over-pulling
 transfers load into it and drags it, and success requires it to have stayed
 put. The consequence is visible in the demonstration video, not just in a
@@ -275,52 +330,25 @@ so the pads sink measurably under load, and a reduced grip squeeze, so that
 load dominates the reading instead of a large constant preload. The bands
 became 0.16–0.23 while sliding and 0.28–0.46 against the stop, stepping at each
 environment's own stop. **The release threshold is measured from those bands,
-not chosen.** We report this as a finding because the naive configuration
+not chosen.** It is recorded as a finding because the naive configuration
 produces a sensor that appears to work and silently carries no information.
 
 **(e) A dataset-contract regression.**
-Feeding the teacher's own recorded actions back through the inference loop must
-reproduce the demonstration exactly. This runs without a checkpoint and
-verifies that the recorded actions mean what the deployment loop believes they
-mean — a failure mode that otherwise surfaces only after a full training run.
-Ours reproduces at 16/16 with 0.00 mm divergence.
+The teacher acts at the rate the policy will. `record_every` sets when a command
+is *issued*, not merely when one is stored, so the arm holds each target for a
+full 40 ms tick exactly as it will under a policy; the teacher still recomputes
+IK and closes its loops every simulation step, and only the command rate drops.
+Without that, a recorded action would be one point off a 100 Hz ramp that at
+inference is held for 40 ms — the arm reaching targets the ramp only passed
+through, and the dataset describing a controller that never runs.
 
-**(f) Upstream contributions.**
-Two gaps identified while building, both suitable for upstream patches:
-Genesis's `RigidEntity` exposes `get_dofs_limit` and every sibling DOF setter
-but no `set_dofs_limit`, though the batched solver-level implementation exists;
-and LeRobot's policy factory resolves policy classes through a hardcoded
-if/elif chain with no registry, so an externally-defined policy cannot be
-selected by `--policy.type` without patching.
+The regression checks that this holds. Feeding the teacher's own recorded
+actions back through the inference loop must reproduce the demonstration
+exactly, and it runs without a checkpoint — so a disagreement between the
+recorded actions and the deployment loop surfaces before a training run rather
+than after one. This dataset reproduces at 16/16 with 0.00 mm divergence.
 
-**(g) Two simulator findings that cost time.**
-
-*Grip force is `kp` times commanded overshoot.* The jaws are commanded
-*through* the rail; they cannot arrive, and the standing position error is the
-grip. Commanding the rail's own thickness would arrive with no error and apply
-no force at all — a gripper that closes on the handle and holds nothing.
-
-*A wrist camera mount does not transfer from a tool-down task.* The grasp
-orientation here carries 90 degrees of wrist yaw, which maps the hand's y axis
-onto world x, so a tilt applied as pitch pans the view sideways and never toward
-the cabinet — the lean has to be roll. A 180 degree roll additionally inverts
-the column that Genesis's `T_to_pos_lookat_up` reads as "up", rendering the
-scene upside down. Both were found by rendering, not by reasoning.
-
-## 6. Deliverables
-
-- **Source repository** — parametric Genesis environment, scripted teacher,
-  dataset collection, policy extension, training and closed-loop evaluation.
-- **Reproducibility README** — setup, dependencies, and the command sequence
-  that reproduces the reported numbers.
-- **Demonstration video** — produced by `uv run render`, with live task state
-  (travel against the episode's stop, tactile reading, cabinet displacement)
-  burned into the frame.
-- **Dataset** — LeRobot-format demonstrations. _Pending._
-- **Fine-tuned checkpoint** and closed-loop evaluation results. _Pending._
-- **This report.**
-
-## 7. Results to date
+## 6. Results to date
 
 Teacher, 128 episodes at N=64:
 
@@ -330,9 +358,13 @@ Teacher, 128 episodes at N=64:
 | opened / released | 128/128 / 128/128 |
 | wrong drawer / cabinet dragged | 0 / 0 |
 | travel | mean 95.9 mm |
-| shortfall from each episode's stop | mean 0.00 mm, max 0.00 mm |
+| shortfall | mean 0.00 mm, max 0.00 mm |
 | cabinet displacement | mean 0.25 mm, max 0.68 mm (limit 10 mm) |
 | release latency | mean 131, median 132, max 205 control steps |
+
+**Shortfall** is how far short of its own stop the drawer was left: the
+episode's travel stop minus how far the drawer actually opened. Zero means the
+drawer reached the stop; a shortfall equal to the stop means it never moved.
 
 A further 960 episodes across the throughput sweep succeeded without exception.
 
@@ -344,36 +376,118 @@ on every other row of this table.
 
 Replay regression: teacher 16/16, replay 16/16, max travel divergence 0.00 mm.
 
-**The training run is one pass, not a converged one.** 10000 steps at batch 16
-is roughly 160k samples — a little under a single epoch of the dataset — and the
-number was set by the hackathon clock at 3.55 s/step, not by a validation curve.
-Memory was never the binding constraint: the card holds batch 32 at 31 GiB and
-scales at 0.3 GiB per sample, so batch 64 was available. But throughput is flat
-in batch size, so a wider batch buys lower gradient variance at the price of
-proportionally fewer updates per hour, and with a fixed budget the updates are
-worth more. Given more time this run would be longer rather than wider — several
-epochs at batch 16, or batch 64 with the step count raised to match. The
-checkpoint's score should be read as a lower bound on what the design reaches,
-not as its ceiling.
+### Trained policy
 
-_Pending: trained-policy success rate, and its breakdown by failure mode._
+64 episodes, 4 batches of 16 environments, same seed for both checkpoints, so
+the two columns score the same 64 episodes.
 
-## 8. What we would highlight
+| | 7500 steps | 10000 steps | teacher |
+|---|---|---|---|
+| success | 11/64 (17.2%) | 22/64 (34.4%) | 128/128 |
+| opened | 25/64 | 37/64 | 128/128 |
+| released | 12/64 | 22/64 | 128/128 |
+| shortfall | mean 50.73 mm | mean 35.78 mm | mean 0.00 mm |
+| wrong drawer | 0 | 0 | 0 |
+| cabinet dragged | 1 | 0 | 0 |
+| cabinet displacement | mean 3.40, max 96.07 mm | mean 1.14, max 6.37 mm | mean 0.25, max 0.68 mm |
+| release latency | mean 142, median 102 | mean 95, median 72 | mean 131, median 132 |
 
-**The design is measurement-driven, and the negative results are kept.** The
-central mechanism of this project — tactile stop detection — did not work in
-its first implementation, and the report says so and explains why. Constants
-that matter are traceable to a measurement rather than a guess: the release
-threshold comes from measured force bands; the gripper's pad offset is derived
-from the robot model rather than assumed; the home pose was solved and then
-verified by rendering that both drawers are actually in frame; the cabinet's
-mass sits inside a window bounded on one side by creep during legitimate pulls
-and on the other by the arm's own wrist-torque limits.
+Each column is a single evaluation run. The episodes are seeded, but the
+policy's flow-matching sampler is not, so these scores carry run-to-run variance
+that 64 episodes does not average away.
 
-**The task resists shortcuts by construction.** Each modality was checked for a
-degenerate solution that bypasses it, and where one existed the *environment*
-was changed rather than the scoring.
+**At 10000 steps the 64 episodes split three ways.** 27 never get the drawer
+open. 15 pull it to its stop but never let go. 22 complete the task. Put another
+way: 58% get the drawer to its stop, and 59% of those release correctly.
 
-## 9. Team
+The 27 barely move the drawer. Shortfall averages 35.8 mm over all 64 episodes,
+and an episode counted as `opened` is within a tolerance of its stop by
+definition — so essentially all of that total belongs to the 27, roughly 85 mm
+apiece against stops averaging 95 mm. That leaves them averaging about 10 mm of
+travel: a nudge rather than a pull. Whether that is 27 small nudges or a handful
+of partial pulls among mostly untouched drawers, the aggregate cannot say; the
+evaluation reports one shortfall mean and no distribution.
 
-_To be completed: team members and their respective contributions._
+Their failure is manipulation precision, which sits *underneath* the three
+modalities the task was built to test rather than inside any of them. The 15
+that reach the stop and never let go are the tactile channel itself.
+
+**Language selection is exact.** Zero wrong-drawer errors across 64 policy
+episodes and 128 teacher episodes, against two drawers that are geometrically
+and visually identical. Nothing but the prompt distinguishes them.
+
+**Release timing beats the teacher it imitates.** Median latency of 72 control
+steps against the teacher's 132, and mean 95 against 131 — while the teacher
+releases on a fixed threshold crossing followed by a fixed jaw-opening ramp.
+
+**The over-pull consequence fired once, and that is the only time it has.** The
+7500-step checkpoint dragged the cabinet 96 mm — an episode that reached the
+stop, kept pulling, and moved the furniture. Every other run in this project,
+teacher and policy, released in time. It is the single direct observation that
+the penalty designed in §5 is reachable in practice and not only in arithmetic,
+and it is what the ~17 N drag threshold sitting under the arm's ~25 N capability
+was for.
+
+### The run was not converged
+
+![Training loss](media/loss.png)
+
+![Learning rate schedule](media/learning_rate.png)
+
+Loss falls from 0.26 to about 0.03, most of it inside the first 300 steps, and
+then descends slowly and noisily to the end without flattening. Underneath it is
+pi0.5's own preset restated: 333 warmup steps — the 1000 in the config scaled by
+`--steps` against `num_decay_steps`, and visible as the peak just after step 300
+— then cosine decay to 2.5e-6.
+
+10000 steps at batch 16 is roughly 160k samples — a little under a single epoch
+of the dataset — and the number was set by the hackathon clock at 3.55 s/step,
+not by a validation curve. **Longer training and a larger batch would both be
+expected to help.** The evidence is in the table: between 7500 and 10000 steps —
+the last quarter of the schedule, at a learning rate already decayed to roughly
+a sixth of peak — episodes reaching the stop went from 25/64 to 37/64, and
+releases from 12 to 22. A policy still gaining that much in the tail of its own
+decay is one that stopped early, not one that plateaued.
+
+Memory was never the binding constraint. The card holds batch 32 at 31 GiB and
+scales at 0.3 GiB per sample, so batch 64 was available. Throughput is flat in
+batch size, so under a fixed clock a wider batch buys lower gradient variance at
+the price of proportionally fewer updates, and the updates were judged worth more.
+That trade looks different now that the dominant failure is known to be grasp
+precision: fine positioning is exactly where gradient noise is expensive, so the
+wider batch passed over here may be worth more than the step count suggested at
+the time. Given a longer budget this run would be several epochs at batch 64 —
+both axes, not one.
+
+The checkpoint's score is a lower bound on what the design reaches, not its
+ceiling.
+
+## 7. Upstream contributions
+
+Two gaps in the underlying libraries surfaced while building this. Both are
+suitable for patches upstream, and both are **still to be done** — they are
+recorded here as intended follow-ups, not as work already submitted.
+
+**Genesis — `RigidEntity.set_dofs_limit`.** `RigidEntity` exposes
+`get_dofs_limit` and every sibling DOF setter, but no matching
+`set_dofs_limit`, even though the batched implementation already exists one
+level down on the solver. This project reaches past the entity to
+`scene.rigid_solver.set_dofs_limit` with global DOF indices; an entity-level
+wrapper taking local indices would make per-environment joint limits a
+first-class operation instead of an implementation detail callers have to know
+about.
+
+**LeRobot — a registry for the policy factory.** `make_policy` resolves policy
+classes through a hardcoded if/elif chain, so an externally defined policy
+cannot be selected by `--policy.type` without patching the factory itself. A
+registration decorator — matching the one `OptimizerConfig` already provides,
+and which this project uses for its 8-bit optimizer — would let third-party
+policies plug in unmodified.
+
+## 8. Team
+
+**Akbar Tokochev** — sole participant. Task and environment design (the
+parametric cabinet, per-environment randomization, and the fingertip tactile
+sensing with its calibration); the scripted teacher and the dataset generation
+pipeline; the tactile conditioning pathway into pi0.5 and the training setup on
+ROCm; closed-loop evaluation; and this report.
