@@ -97,6 +97,11 @@ the ROCm build is not something the resolver can substitute.
 
 ## Setup
 
+```bash
+git clone https://github.com/Akbro23/open-drawer.git
+cd open-drawer
+```
+
 ### 1. Credentials
 
 ```bash
