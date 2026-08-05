@@ -297,6 +297,9 @@ Generated directories — `assets/` (rewritten from config on every scene build)
 
 ## Credits
 
+This project is [Apache-2.0](LICENSE) licensed. That covers the code here; the
+fine-tuned checkpoint is a derivative of pi0.5 and carries Gemma's terms, below.
+
 The pipeline this project started from — Genesis scene, scripted teacher,
 LeRobot dataset, policy fine-tune and closed-loop evaluation, all on a single
 Radeon — follows the shape of
