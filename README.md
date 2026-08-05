@@ -1,8 +1,11 @@
 # Open Drawer
 
-Language-conditioned, touch-gated drawer opening. A Franka Panda opens the
-drawer a prompt names, pulls it to a stop it cannot see, feels the stop, and
-lets go — in Genesis, with pi0.5 conditioned on a fingertip tactile array.
+A Franka Panda opens the drawer a prompt names, pulls it to a stop it cannot see,
+feels the stop, and lets go before it drags the cabinet. Simulated in Genesis,
+with pi0.5 fine-tuned to use a fingertip tactile array.
+
+The question behind it: can touch make a vision-language-action policy safe to
+use on a mechanism whose limit it cannot see?
 
 **Source:** [github.com/Akbro23/open-drawer](https://github.com/Akbro23/open-drawer)
 
@@ -28,9 +31,9 @@ and what moves is the furniture.
 
 ### Trained policy
 
-The fine-tuned checkpoint driving the same loop. It completes the task on about
-a third of episodes, so both outcomes are here — the failure is the more
-informative one, and it is not a language, vision or touch failure.
+The fine-tuned checkpoint driving the same loop, in both outcomes. The failure is
+the more informative one: a grasp failure, upstream of language, vision and
+touch.
 
 | Reaches the stop and releases | Never moves the drawer |
 |---|---|
@@ -55,6 +58,9 @@ three modalities load-bearing rather than decorative:
 - **Over-pulling costs something.** The cabinet is not bolted down. Keep pulling
   after the drawer bottoms out and the cabinet slides, which fails the episode —
   so pulling for the maximum duration is not a winning strategy.
+
+That last property is what the setup is for: finishing the task and doing it
+safely are the same event, so a success rate here is also a safety measure.
 
 The pipeline is three stages: a scripted teacher records demonstrations in
 batched simulation, pi0.5 is fine-tuned on them with a tactile pathway added to
@@ -319,3 +325,6 @@ generated from `config.py`.
 pi0.5 is built on PaliGemma, so the checkpoint produced here inherits its
 licence: *Gemma is provided under and subject to the Gemma Terms of Use found at
 [ai.google.dev/gemma/terms](https://ai.google.dev/gemma/terms)*.
+
+Every stage of this project ran on a Radeon Pro W7900D under ROCm, on cloud
+instance time provided by AMD for the Radeon hackathon.

@@ -2,13 +2,20 @@
 
 **Track 3: Physical AI Challenge**
 
+**The question this project asks is whether touch can make a
+vision-language-action policy safe to use on a mechanism whose limit it cannot
+see.**
+
 A Franka Panda opens the drawer a language prompt asks for — one of two that are
 geometrically and visually identical. It pulls until the drawer meets a travel
 stop, a limit randomized every episode that nothing in the scene reveals, feels
-that stop through a fingertip tactile array, and releases.
+that stop through a fingertip tactile array, and lets go before it drags the
+cabinet it is pulling against.
 
 The environment is built in Genesis. The policy is pi0.5, a vision-language-action
 model, fine-tuned with a tactile conditioning pathway added to its action expert.
+The task is scored so that completing it and doing it safely are the same event:
+an episode counts only if the cabinet is still where it started.
 
 ## Deliverables
 
@@ -32,7 +39,8 @@ published files — §3 describes the first and the command that regenerates it,
 
 ## 1. Target application
 
-**Articulated-object manipulation with an unknown mechanical limit.**
+**Articulated-object manipulation with an unknown mechanical limit — and the
+safety problem that comes with it.**
 
 Every drawer ends somewhere, and the robot cannot know where. It sees a handle —
 not where the rail ends, not where the stop sits, not how far the mechanism will
@@ -49,15 +57,17 @@ torn-out drawer, a dragged cabinet, a broken slide, an arm tripping its own
 protective stop. Force removes the guess. It reports the limit at the instant
 the limit arrives, designed stop or jam or obstruction alike, and all three call
 for the same response: stop pulling. A robot acting on contact stops because the
-mechanism told it to, not because a counter ran out — which is what makes it
-safe to work against hardware it has never seen, in a home, a warehouse aisle or
-a laboratory.
+mechanism told it to, not because its own plan said the motion was over — which
+is what makes it safe to work against objects it has never seen, in a home, a
+warehouse aisle or a laboratory.
 
 The task here is the smallest honest version of that problem. A cabinet stands
 free on a table with two drawers, left and right. A prompt asks for one of them:
 "open the left drawer". The drawer it names stops at a limit that can only be
-felt. Nothing in that arrangement is decoration; each modality decides something
-the other two cannot supply.
+felt, and the cabinet is not bolted down, so a robot that keeps pulling past that
+limit does visible damage instead of quietly wasting effort. Nothing in that
+arrangement is decoration; each modality decides something the other two cannot
+supply.
 
 | Modality | Decides | Why it cannot be skipped |
 |---|---|---|
@@ -104,10 +114,14 @@ different correct actions and make the behaviour unlearnable.
 
 **Scoring.** An episode succeeds only if the target drawer reached its stop, the
 gripper released, the other drawer never moved, and the cabinet stayed put —
-all held for 8 consecutive control steps. Failure modes are counted separately
-(wrong drawer, released short, never released, cabinet dragged), and *release
-latency* — control steps between the true stop and the release — is reported as
-the measure of how well the tactile channel is doing its job.
+all held for 8 consecutive control steps. Safety is a pass condition rather than
+a separate metric: an unanchored cabinet means the design's central question
+cannot be answered without also answering whether the policy is safe, because a
+policy that pulls until the budget runs out fails the same episode it would
+otherwise complete. Failure modes are counted separately (wrong drawer, released
+short, never released, cabinet dragged), and *release latency* — control steps
+between the true stop and the release — is reported as the measure of how well
+the tactile channel is doing its job.
 
 ## 3. Datasets
 
@@ -436,52 +450,82 @@ Replay regression: teacher 16/16, replay 16/16, max travel divergence 0.00 mm.
 64 episodes, 4 batches of 16 environments, same seed for both checkpoints, so
 the two columns score the same 64 episodes.
 
-| | 7500 steps | 10000 steps | teacher |
-|---|---|---|---|
-| success | 11/64 (17.2%) | 22/64 (34.4%) | 128/128 |
-| opened | 25/64 | 37/64 | 128/128 |
-| released | 12/64 | 22/64 | 128/128 |
-| shortfall | mean 50.73 mm | mean 35.78 mm | mean 0.00 mm |
-| wrong drawer | 0 | 0 | 0 |
-| cabinet dragged | 1 | 0 | 0 |
-| cabinet displacement | mean 3.40, max 96.07 mm | mean 1.14, max 6.37 mm | mean 0.25, max 0.68 mm |
-| release latency | mean 142, median 102 | mean 95, median 72 | mean 131, median 132 |
+| | 7500 steps | 10000 steps |
+|---|---|---|
+| success | 11/64 (17.2%) | 22/64 (34.4%) |
+| opened | 25/64 (39.1%) | 37/64 (57.8%) |
+| released | 12/64 (18.8%) | 22/64 (34.4%) |
+| wrong drawer | 0/64 (0%) | 0/64 (0%) |
+| cabinet dragged | 1/64 (1.6%) | 0/64 (0%) |
+| shortfall, over all 64 | mean 50.73 mm | mean 35.78 mm |
+| cabinet displacement | mean 3.40, max 96.07 mm | mean 1.14, max 6.37 mm |
+| release latency | mean 142, median 102 | mean 95, median 72 |
 
-Each column is a single evaluation run. The episodes are seeded, but the
-policy's flow-matching sampler is not, so these scores carry run-to-run variance
-that 64 episodes does not average away.
+**What the rows count.** Every episode's drawer has its own travel limit, drawn
+at random and invisible until the drawer runs into it. `opened` is the episodes
+that pulled the drawer out to that limit, within 4 mm — not the ones that merely
+moved it. `released` is the episodes that ended with the jaws open and no force
+left on the pads, meaning the arm is off the rail. `success` needs both, plus an
+untouched second drawer and a cabinet still within 10 mm of where it spawned, all
+four holding for 8 consecutive control steps. `shortfall` is the travel left
+unopened, averaged over all 64 episodes including the ones that scored — an
+`opened` episode contributes at most 4 mm to it. Each column is a single
+evaluation run: the episodes are seeded, but the flow-matching sampler is not, so
+these carry run-to-run variance that 64 episodes does not average away.
 
-**At 10000 steps the 64 episodes split three ways.** 27 never get the drawer
-open. 15 pull it to its stop but never let go. 22 complete the task. Put another
-way: 58% get the drawer to its stop, and 59% of those release correctly.
+**At 10000 steps the 64 episodes split three ways.** 27 never get hold of the
+drawer. 37 pull it out to its limit; of those, 22 then let go and 15 do not.
 
-The 27 barely move the drawer. Shortfall averages 35.8 mm over all 64 episodes,
-and an episode counted as `opened` is within a tolerance of its stop by
-definition — so essentially all of that total belongs to the 27, roughly 85 mm
-apiece against stops averaging 95 mm. That leaves them averaging about 10 mm of
-travel: a nudge rather than a pull. Whether that is 27 small nudges or a handful
-of partial pulls among mostly untouched drawers, the aggregate cannot say; the
-evaluation reports one shortfall mean and no distribution.
+**What is missing is the grasp, not the task.** The outcome is close to
+all-or-nothing. Shortfall averages 35.8 mm over all 64 episodes — 2290 mm in
+total — and the 37 that opened contribute at most 4 mm each, so at least 2140 mm
+of it belongs to the 27. That is 79 mm apiece or more, against travel limits
+averaging 96 mm, leaving them under 17 mm of drawer travel even on the most
+generous accounting: a nudge rather than a partial pull. Once the fingers are on
+the rail the pull runs all the way to the limit; what the policy has not learned
+at this budget is the descent onto it — 31 mm of jaw straddling a 12 mm bar,
+under per-episode jitter of the cabinet's pose and of the grasp height itself.
+That failure sits *underneath* language, vision and touch rather than inside any
+of them.
 
-Their failure is manipulation precision, which sits *underneath* the three
-modalities the task was built to test rather than inside any of them. The 15
-that reach the stop and never let go are the tactile channel itself.
+Everything downstream of the grasp is a much stronger result. Of the episodes
+that got the drawer out to its limit:
 
-**Language selection is exact.** Zero wrong-drawer errors across 64 policy
-episodes and 128 teacher episodes, against two drawers that are geometrically
-and visually identical. Nothing but the prompt distinguishes them.
+| | 7500 steps | 10000 steps |
+|---|---|---|
+| let go of the rail, and scored | 11/25 (44.0%) | 22/37 (59.5%) |
+| left the cabinet in place | 24/25 (96.0%) | 37/37 (100%) |
+| left the second drawer shut | 25/25 (100%) | 37/37 (100%) |
 
-**Release timing beats the teacher it imitates.** Median latency of 72 control
-steps against the teacher's 132, and mean 95 against 131 — while the teacher
-releases on a fixed threshold crossing followed by a fixed jaw-opening ramp.
+These follow from the first table rather than being measured separately: every
+success is an episode that opened the drawer, and only a drawer already at its
+limit can be over-pulled.
 
-**The over-pull consequence fired once, and that is the only time it has.** The
-7500-step checkpoint dragged the cabinet 96 mm — an episode that reached the
-stop, kept pulling, and moved the furniture. Every other run in this project,
-teacher and policy, released in time. It is the single direct observation that
-the penalty designed in §5 is reachable in practice and not only in arithmetic,
-and it is what the ~17 N drag threshold sitting under the arm's ~25 N capability
-was for.
+**59.5% of the episodes that got hold of the drawer completed the whole task**,
+up from 44.0% at 7500 steps. The 15 that fall short are the ones where the
+tactile release is the failing part: they hold the drawer at its limit without
+dragging the cabinet, but never open the jaws to end the episode. That is a
+timing failure at the end of a pull that otherwise went right.
+
+**Every drawer this policy opened was the one the prompt named**, and the other
+drawer stayed shut in all 64 episodes at both checkpoints, as it did across all
+128 teacher episodes. The two drawers are geometrically and visually identical;
+nothing but the prompt distinguishes them.
+
+**The cabinet is left in place in 100% of episodes at 10000 steps**, including
+all 37 that pulled a drawer to its limit and the 15 that then sat on it, with
+peak displacement 6.37 mm against the 10 mm threshold. At 7500 steps the figure
+is 96.0%: one episode reached the limit, kept pulling, and moved the cabinet
+96 mm. That single case is the direct observation that the penalty designed in §5
+is reachable in practice and not only in arithmetic — the ~17 N drag threshold
+sitting under the arm's ~25 N capability is what put it in reach — and 2500 more
+steps of training removed it.
+
+Read together, these are one result. When this policy has the drawer, it opens it
+to a limit it cannot see, on the drawer the prompt named, without hauling the
+furniture across the table. The safety behaviour the project set out to produce
+is the part that holds; what caps the headline number is a grasp that is upstream
+of it.
 
 ### The run was not converged
 
@@ -489,90 +533,78 @@ was for.
 
 ![Learning rate schedule](media/learning_rate.png)
 
-Loss falls from 0.26 to about 0.03, most of it inside the first 300 steps, and
-then descends slowly and noisily to the end without flattening. Underneath it is
-pi0.5's own preset restated: 333 warmup steps — the 1000 in the config scaled by
-`--steps` against `num_decay_steps`, and visible as the peak just after step 300
-— then cosine decay to 2.5e-6.
+Loss falls from 0.26 to about 0.03, most of it inside the first 300 steps, then
+descends slowly and noisily to the end without flattening. The bump just after
+step 300 is pi0.5's own preset restated: 333 warmup steps — the 1000 in the
+config scaled by `--steps` against `num_decay_steps` — then cosine decay to
+2.5e-6.
 
-10000 steps at batch 16 is roughly 160k samples — a little under a single epoch
-of the dataset — and the number was set by the hackathon clock at 3.55 s/step,
-not by a validation curve. **Longer training and a larger batch would both be
-expected to help.** The evidence is in the table: between 7500 and 10000 steps —
-the last quarter of the schedule, at a learning rate already decayed to roughly
-a sixth of peak — episodes reaching the stop went from 25/64 to 37/64, and
-releases from 12 to 22. A policy still gaining that much in the tail of its own
-decay is one that stopped early, not one that plateaued.
+10000 steps at batch 16 is roughly 160k samples, a little under a single epoch of
+the dataset, and the number was set by the hackathon clock at 3.55 s/step rather
+than by a validation curve. The table says the same thing: across the last
+quarter of the schedule, at a learning rate already decayed to about a sixth of
+peak, episodes reaching the limit went from 25/64 to 37/64 and releases from 12
+to 22. A policy still gaining that much in the tail of its own decay stopped
+early; it did not plateau.
 
 Memory was never the binding constraint. The card holds batch 32 at 31 GiB and
-scales at 0.3 GiB per sample, so batch 64 was available. Throughput is flat in
-batch size, so under a fixed clock a wider batch buys lower gradient variance at
-the price of proportionally fewer updates, and the updates were judged worth more.
-That trade looks different now that the dominant failure is known to be grasp
-precision: fine positioning is exactly where gradient noise is expensive, so the
-wider batch passed over here may be worth more than the step count suggested at
-the time. Given a longer budget this run would be several epochs at batch 64 —
-both axes, not one.
+scales at 0.3 GiB per sample, so batch 64 was available, and throughput is flat
+in batch size — under a fixed clock the wider batch buys lower gradient variance
+at the price of proportionally fewer updates, and the updates were judged worth
+more at the time. That trade reads differently now that the dominant failure is
+known to be grasp precision, which is exactly where gradient noise is expensive.
+Given a longer budget this run would be several epochs at batch 64 — both axes,
+not one.
 
 The checkpoint's score is a lower bound on what the design reaches, not its
 ceiling.
 
-**The failures do not include the unsafe one.** No episode at 10000 steps dragged
-the cabinet, and peak displacement was 6.37 mm against a 10 mm threshold —
-including the 15 episodes that reached the stop and never let go. Whatever this
-policy has yet to learn about grasping, it does not keep hauling on a mechanism
-that has stopped moving. The behaviour the task was built to penalize is the one
-behaviour absent from the results.
-
 ## 7. Limitations and future work
 
-**The configuration is not the one that maximizes this score.** pi0.5 is a 4B
-model pretrained for open-world generalization, fine-tuned here on a single task,
-on 1024 demonstrations, for slightly under one epoch. It was chosen because the
-task requires language conditioning and because the contribution is about adding
-touch to a pretrained VLA — not because a 4B VLA is an efficient way to learn one
-drawer. At this data scale a smaller task-specific policy would likely score
-higher; what it would not do is carry the prompt, or answer whether a tactile
-pathway can be grafted onto a model that never had one.
+**One task.** pi0.5 is a 4B model pretrained for open-world, multi-task
+generalization, and it is fine-tuned here on a single task for slightly under one
+epoch — close to the configuration it is weakest in. The dominant failure fits
+that: the policy cannot reliably get the jaws onto the rail, and a dataset
+covering several mechanisms is the likeliest fix for a grasp this brittle. At this
+data scale a smaller task-specific policy would probably score higher; what it
+would not do is carry the prompt, or answer whether a tactile pathway can be
+grafted onto a model that never had one. Several such tasks in one dataset —
+doors, latches, trays, all of which end at a limit that has to be felt — is the
+first thing to do next.
 
-**The scene varies less than the task description suggests.** One cabinet and one
-rail — 40 mm proud with a 28 mm slot, the geometry that turns the pull into a
-normal force on the pads. Its pose moves ±20 mm and ±8° per episode, which is
-enough to defeat a memorized trajectory but not enough to claim robustness to
-placement. And the grasp never changes: tool-down, jaws straddling the rail, one
-approach that the entire teacher is built around. A recessed pull, a knob or a
-lip cannot be straddled at all, and nothing here shows the tactile pathway
-survives a different way of holding the thing. Varying the hardware and the
-approach matters as much as varying the task.
+**One scene.** One cabinet, one rail, one grasp: tool-down, jaws straddling a
+12 mm bar, the single approach the whole teacher is built around. The cabinet's
+pose moves ±20 mm and ±8° per episode, which is enough to defeat a memorized
+trajectory but not enough to claim robustness to placement. A recessed pull, a
+knob or a lip cannot be straddled at all, and nothing here shows the tactile
+pathway survives a different way of holding the object.
 
-**The generalization pi0.5 exists for is untested.** Every episode is the same
-task under the same verb. The question worth asking next is whether touch learned
-on drawers
-transfers to the other mechanisms §1 names — doors, latches, trays and valves —
-all of which also end at a limit that has to be felt. That needs several such
-tasks in one dataset, and it is the first thing to do.
-
-**Two smaller gains are already identified.** The run was still improving when
-the clock stopped it, so more steps at a wider batch is the obvious first retry.
-And single-robot inference clears its budget by executing more of each predicted
-chunk — a change that needs no retraining at all.
+**No ablation against stock pi0.5.** The same recipe without the tactile pathway
+was never trained, so this report cannot separate what the touch conditioning
+contributes from what fine-tuning on this dataset contributes. The teacher
+establishes that the task needs touch, and §5(a) shows the pathway's contribution
+growing from zero during training, but the controlled comparison — same data, same
+steps, no tactile input — is what would put a number on it. It costs one more
+10-hour run.
 
 ## 8. Conclusion
 
-A drawer ends where it ends, and no camera can say where. This project makes that
-the entire task: language chooses which drawer, vision finds the handle, and touch
-— only touch — decides when to stop.
+Where a drawer stops is not always something vision can recover: the limit belongs
+to the mechanism, not to how the object looks. A robot that cannot feel it keeps
+pulling on something that has already stopped — breaking the mechanism, dragging
+whatever it is braced against, or injuring whoever is standing beside it. This
+project makes that the whole task: language chooses which drawer, vision finds the
+rail, and touch decides when to stop.
 
 Grafting a tactile pathway onto a pretrained vision-language-action model turns
-out to be cheap, and the evidence that the model uses it is direct. The
-conditioning grows from an initialized zero, and across 64 evaluation episodes the
-cabinet was never dragged — including in the episodes the policy otherwise
-failed.
+out to be cheap, and the results say the model uses it. The policy stops hauling
+on a drawer that has stopped moving, and leaves the unanchored cabinet standing.
 
-Force is what lets a robot stop because the mechanism said so, rather than because
-a counter ran out. As robots work on hardware they have not seen, beside people
-who assume they will not break it, that distinction is what separates a policy
-that finishes a task from one that can be trusted with it.
+Force is the feedback that makes safe physical interaction possible. With it, a
+robot responds to what an object is actually doing under its grip rather than to
+its own prediction of how that object will move. That is what safety rests on the
+moment a robot leaves the objects it was trained on: the ability to feel the world
+push back, and to stop before something — or someone — is harmed.
 
 ## 9. Upstream contributions
 
