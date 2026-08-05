@@ -178,7 +178,8 @@ maps shared by reference across parameters).
 same GPU, with the policy serving action chunks from an internal queue so a
 forward pass runs once per chunk rather than once per control step. Timed at the
 chunk boundaries, around the whole call — the forward is asynchronous, so a
-narrower measurement would time kernel launches rather than work:
+narrower measurement would time kernel launches rather than work. From
+`uv run evaluate --envs 1` and `--envs 16`, which report it per run:
 
 | environments | per forward pass | per environment | budget |
 |---|---|---|---|
@@ -202,7 +203,8 @@ Whether that trade is acceptable is a control question rather than a compute
 one, and the checkpoint supports either answer as it stands.
 
 Measured throughput of the scripted teacher with no cameras in the scene, so the
-figures are physics alone. Two batches at each N:
+figures are physics alone — `uv run rollout --scaling 32,64,128,256`, which runs
+two batches at each N:
 
 | N (envs) | batches | episodes | wall | episodes/min | speedup | success |
 |---|---|---|---|---|---|---|
@@ -218,8 +220,10 @@ part of the pipeline that grows with the batch.
 
 Collection is a different curve, and is measured separately for that reason.
 Repeating the sweep with the wrist camera on and a recorder attached — the
-configuration collection actually uses — separates the two costs. One batch at
-each N here rather than two, so the physics column is the table above halved:
+configuration collection actually uses — separates the two costs.
+`uv run collect --scaling 32,64,128` holds one recorded batch per N in memory and
+writes no dataset, which is what the buffered column measures. One batch at each
+N here rather than two, so the physics column is the table above halved:
 
 | N (envs) | physics only | + rendering | render cost | buffered | device |
 |---|---|---|---|---|---|
@@ -253,8 +257,8 @@ Dataset generation here is a single-threaded video-encoding problem wearing a
 GPU-throughput costume, and the only optimization that would move it is
 parallel or hardware-accelerated encoding in the writer.
 
-**Training, measured.** Ten steps per configuration, everything else at the
-defaults above:
+**Training, measured.** `uv run train --steps=10` per configuration, varying the
+batch size and the optimizer, everything else at the defaults above:
 
 | optimizer | batch | peak memory | step | samples/s |
 |---|---|---|---|---|
@@ -333,22 +337,20 @@ The signal is noisy and carries little on its own, but it is the
 training-side counterpart to the improvement in release behaviour that §6
 measures over the same interval.
 
-**(b) An invisible, per-environment task parameter.**
-Each drawer's travel stop is randomized *per environment* using Genesis's
-batched DOF-limit facility. This makes "how far to pull" genuinely
-unobservable — not merely hard to see — which is what forces the policy to
-close the loop on touch rather than on memorized geometry.
+**(b) A task in which touch cannot be shortcut.**
+Each drawer's travel stop is randomized *per environment*, written through
+Genesis's batched DOF-limit facility. That makes "how far to pull" genuinely
+unobservable rather than merely hard to see: there is nothing in the scene for a
+policy to memorize or to look at.
 
-**(c) Task design that makes the modality necessary.**
-An earlier formulation of this task is degenerate: with a hard stop and no
-penalty, a policy that pulls for the maximum duration and then opens its jaws
-succeeds every time without ever using touch. This is resolved physically
-rather than with a scoring rule — the cabinet is unanchored, so over-pulling
-transfers load into it and drags it, and success requires it to have stayed
-put. The consequence is visible in the demonstration video, not just in a
-metric.
+Invisibility alone is not enough. With a hard stop and no penalty the task is
+degenerate — pull for the maximum duration, open the jaws, and every episode
+succeeds without touch ever being used. That is resolved physically rather than
+with a scoring rule: the cabinet is unanchored, so over-pulling transfers load
+into it and drags it, and success requires it to have stayed put. The
+consequence is visible in the demonstration video, not just in a metric.
 
-**(d) Empirical characterization of a simulated tactile sensor.**
+**(c) Empirical characterization of a simulated tactile sensor.**
 Genesis's `KinematicTaxel` measures probe *penetration*, not contact force.
 Against a rigid handle the pads deform by micrometres under load and the
 reading is flat — measured at 0.19 N through an entire pull, unchanged when the
@@ -360,7 +362,7 @@ environment's own stop. **The release threshold is measured from those bands,
 not chosen.** It is recorded as a finding because the naive configuration
 produces a sensor that appears to work and silently carries no information.
 
-**(e) A dataset-contract regression.**
+**(d) A dataset-contract regression.**
 The teacher acts at the rate the policy will. `record_every` sets when a command
 is *issued*, not merely when one is stored, so the arm holds each target for a
 full 40 ms tick exactly as it will under a policy; the teacher still recomputes
@@ -375,7 +377,7 @@ exactly, and it runs without a checkpoint — so a disagreement between the
 recorded actions and the deployment loop surfaces before a training run rather
 than after one. This dataset reproduces at 16/16 with 0.00 mm divergence.
 
-**(f) An 8-bit optimizer that survives checkpointing.**
+**(e) An 8-bit optimizer that survives checkpointing.**
 LeRobot invites new optimizers through `OptimizerConfig.register_subclass`, but
 its checkpoint writer is safetensors, which bitsandbytes' state violates twice:
 `step` is a Python `int` where torch uses a 0-dim tensor, and the quantization
@@ -387,6 +389,19 @@ config validator silently overwrites the chosen optimizer with the policy's own,
 and training proceeds in 32-bit without a warning. The payoff is the §4
 measurement — 11 GiB saved at matched batch size for a 2% step-time cost — and,
 because the state round-trips, a ten-hour run that can resume from a crash.
+
+**(f) Batched by construction, and a throughput result that redirects the
+effort.**
+Reset, randomization, IK, control, tactile sensing and scoring are all batched
+array operations, and the teacher's six phases run in lockstep with
+per-environment branching expressed as masked commands rather than ragged
+control flow. A single Python loop in the reset or control path would have capped
+throughput regardless of the GPU. The payoff is in §4: eight times the
+environments for 10% more wall time, with success unchanged. The same sweep then
+produced the more useful result — dataset generation is not GPU-bound at all.
+Simulation and rendering are 6% of the wall clock and the LeRobot writer's
+single-threaded video encoding is the rest, so the batching that makes the
+physics nearly free is also what proves further GPU work would buy nothing.
 
 ## 6. Results to date
 
