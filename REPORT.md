@@ -16,8 +16,9 @@ model, fine-tuned with a tactile conditioning pathway added to its action expert
   dataset collection, policy extension, training and closed-loop evaluation.
 - **Reproducibility README** — setup, dependencies, and the command sequence
   that reproduces the reported numbers.
-- **Demonstration video** — produced by `uv run render` for the teacher and by
-  `uv run evaluate --video` for the policy, both with live task state (travel
+- **Demonstration video** — [youtu.be/ys5NUw7-f2Q](https://youtu.be/ys5NUw7-f2Q).
+  The simulator footage in it is produced by `uv run render` for the teacher and
+  by `uv run evaluate --video` for the policy, both with live task state (travel
   against the episode's stop, tactile reading, cabinet displacement) burned into
   the frame.
 - **Dataset** — 1024 LeRobot-format demonstrations, 170,624 frames.

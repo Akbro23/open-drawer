@@ -8,6 +8,9 @@ lets go — in Genesis, with pi0.5 conditioned on a fingertip tactile array.
 and the reasoning behind the task design, the tactile pathway and the training
 configuration.
 
+**Demonstration video:** https://youtu.be/ys5NUw7-f2Q — the whole pipeline, from
+collection through training to closed-loop evaluation.
+
 ## Demonstration
 
 ### Scripted teacher
