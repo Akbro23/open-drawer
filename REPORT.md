@@ -517,7 +517,64 @@ both axes, not one.
 The checkpoint's score is a lower bound on what the design reaches, not its
 ceiling.
 
-## 7. Upstream contributions
+**The failures do not include the unsafe one.** No episode at 10000 steps dragged
+the cabinet, and peak displacement was 6.37 mm against a 10 mm threshold —
+including the 15 episodes that reached the stop and never let go. Whatever this
+policy has yet to learn about grasping, it does not keep hauling on a mechanism
+that has stopped moving. The behaviour the task was built to penalize is the one
+behaviour absent from the results.
+
+## 7. Limitations and future work
+
+**The configuration is not the one that maximizes this score.** pi0.5 is a 4B
+model pretrained for open-world generalization, fine-tuned here on a single task,
+on 1024 demonstrations, for slightly under one epoch. It was chosen because the
+task requires language conditioning and because the contribution is about adding
+touch to a pretrained VLA — not because a 4B VLA is an efficient way to learn one
+drawer. At this data scale a smaller task-specific policy would likely score
+higher; what it would not do is carry the prompt, or answer whether a tactile
+pathway can be grafted onto a model that never had one.
+
+**The scene varies less than the task description suggests.** One cabinet and one
+rail — 40 mm proud with a 28 mm slot, the geometry that turns the pull into a
+normal force on the pads. Its pose moves ±20 mm and ±8° per episode, which is
+enough to defeat a memorized trajectory but not enough to claim robustness to
+placement. And the grasp never changes: tool-down, jaws straddling the rail, one
+approach that the entire teacher is built around. A recessed pull, a knob or a
+lip cannot be straddled at all, and nothing here shows the tactile pathway
+survives a different way of holding the thing. Varying the hardware and the
+approach matters as much as varying the task.
+
+**The generalization pi0.5 exists for is untested.** Every episode is the same
+task under the same verb. The question worth asking next is whether touch learned
+on drawers
+transfers to the other mechanisms §1 names — doors, latches, trays and valves —
+all of which also end at a limit that has to be felt. That needs several such
+tasks in one dataset, and it is the first thing to do.
+
+**Two smaller gains are already identified.** The run was still improving when
+the clock stopped it, so more steps at a wider batch is the obvious first retry.
+And single-robot inference clears its budget by executing more of each predicted
+chunk — a change that needs no retraining at all.
+
+## 8. Conclusion
+
+A drawer ends where it ends, and no camera can say where. This project makes that
+the entire task: language chooses which drawer, vision finds the handle, and touch
+— only touch — decides when to stop.
+
+Grafting a tactile pathway onto a pretrained vision-language-action model turns
+out to be cheap, and the evidence that the model uses it is direct. The
+conditioning grows from an initialized zero, and across 64 evaluation episodes the
+cabinet was never dragged — including in the episodes the policy otherwise
+failed.
+
+Force is what lets a robot stop because the mechanism said so, rather than because
+a counter ran out. As robots work on hardware they have not seen, beside people
+who assume they will not break it, that distinction is what separates a policy
+that finishes a task from one that can be trusted with it.
+
+## 9. Upstream contributions
 
 Filed against Genesis during the competition:
 
@@ -547,7 +604,7 @@ And against LeRobot:
 [p3174]: https://github.com/Genesis-Embodied-AI/genesis-world/pull/3174
 [p4330]: https://github.com/huggingface/lerobot/pull/4330
 
-## 8. Team
+## 10. Team
 
 **Akbar Tokochev** — sole participant. Task and environment design (the
 parametric cabinet, per-environment randomization, and the fingertip tactile
