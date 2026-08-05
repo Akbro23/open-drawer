@@ -244,9 +244,9 @@ release — which is the measure of whether the tactile channel is doing its job
 It scores 64 episodes — 4 batches of 16 environments, `--envs` and `--batches`
 to change that — reading
 `out/train/open_drawer/checkpoints/last/pretrained_model` unless `--checkpoint`
-says otherwise. Add `--video out/eval.mp4` to film one
-environment of the first batch, with the live task state burned in — this is
-how the demonstration video above was made.
+says otherwise. Add `--video out/eval.mp4` to film one environment of the first
+batch with the live task state burned in, which is how the policy clips above
+were made.
 
 > Do not evaluate while training is running. Both load a 4B model onto the same
 > GPU.
