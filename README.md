@@ -4,6 +4,8 @@ Language-conditioned, touch-gated drawer opening. A Franka Panda opens the
 drawer a prompt names, pulls it to a stop it cannot see, feels the stop, and
 lets go — in Genesis, with pi0.5 conditioned on a fingertip tactile array.
 
+**Source:** [github.com/Akbro23/open-drawer](https://github.com/Akbro23/open-drawer)
+
 **Technical report:** [REPORT.md](REPORT.md) — measurements, scaling results,
 and the reasoning behind the task design, the tactile pathway and the training
 configuration.
@@ -268,21 +270,26 @@ Every command takes `--help`.
 ## Repository map
 
 ```
-config.py          every tunable, frozen dataclasses; asserts its own geometry
-assets.py          generated cabinet MJCF: carcass, two drawers, rails
-randomize.py       target side, per-drawer stops, cabinet pose, grasp residual
-scene.py           batched build and reset; per-env travel limits
-robot.py           batched IK, velocity-limited moves, the control tick
-tactile.py         taxel grids, the 24-dim feature, the peak reading
-task_state.py      rail pose, success latch, release latency
-teacher.py         the six phases, in lockstep across environments
-record.py          (observation, action) pairs at 25 Hz
-collect.py         LeRobot dataset writer, plus a RAM scaling probe
-policy_tactile.py  pi0.5 with tactile wired into the action expert
-train.py           lerobot-train wrapper with an 8-bit optimizer
-eval.py            policy in the loop; the replay regression
-rollout.py         success rate and throughput
-render_episode.py  mp4 plus the derived-geometry dump
+open_drawer/
+  config.py          every tunable, frozen dataclasses; asserts its own geometry
+  assets.py          generated cabinet MJCF: carcass, two drawers, rails
+  randomize.py       target side, per-drawer stops, cabinet pose, grasp residual
+  scene.py           batched build and reset; per-env travel limits
+  robot.py           batched IK, velocity-limited moves, the control tick
+  tactile.py         taxel grids, the 24-dim feature, the peak reading
+  task_state.py      rail pose, success latch, release latency
+  teacher.py         the six phases, in lockstep across environments
+  record.py          (observation, action) pairs at 25 Hz
+  collect.py         LeRobot dataset writer, plus a RAM scaling probe
+  policy_tactile.py  pi0.5 with tactile wired into the action expert
+  train.py           lerobot-train wrapper with an 8-bit optimizer
+  eval.py            policy in the loop; the replay regression
+  rollout.py         success rate and throughput
+  render_episode.py  mp4 plus the derived-geometry dump
+
+scripts/
+  instance-env.sh    caches, secrets and mirrors
+  train.sh           detached training launcher
 ```
 
 Generated directories — `assets/` (rewritten from config on every scene build),
