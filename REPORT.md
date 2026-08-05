@@ -403,7 +403,7 @@ Simulation and rendering are 6% of the wall clock and the LeRobot writer's
 single-threaded video encoding is the rest, so the batching that makes the
 physics nearly free is also what proves further GPU work would buy nothing.
 
-## 6. Results to date
+## 6. Results
 
 Teacher, 128 episodes at N=64:
 
